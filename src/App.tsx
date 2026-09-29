@@ -6,7 +6,7 @@ import Login from './pages/Login'
 import Layout from './components/Layout'
 import Lista from './pages/Lista'
 import Editor from './pages/Editor'
-
+import Fornitori from './pages/Fornitori'
 export default function App() {
   const [session, setSession] = useState<any>(undefined)
 
@@ -27,6 +27,7 @@ export default function App() {
           <Route path="/nuovo" element={<Editor />} />
           <Route path="/fattura/:id" element={<Editor />} />
 <Route path="/stampa/:id" element={<Stampa />} />
+<Route path="/fornitori" element={<Fornitori />} />
         </Route>
       </Routes>
     </BrowserRouter>

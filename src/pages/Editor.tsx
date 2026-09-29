@@ -49,6 +49,7 @@ export default function Editor() {
   const [tipo, setTipo] = useState(tipoFromUrl)
   const [emailSent, setEmailSent] = useState(false)
   const [sdiStatus, setSdiStatus] = useState('bozza')
+  const [paid, setPaid] = useState(false)
   const [ivaTutte, setIvaTutte] = useState('22')
 
   useEffect(() => { start() }, [])
@@ -69,6 +70,7 @@ export default function Editor() {
         setTipo(inv.invoice_type || 'fattura')
         setEmailSent(!!inv.email_sent)
         setSdiStatus(inv.sdi_status || 'bozza')
+        setPaid(!!inv.paid)
       }
       const { data: it } = await supabase.from('invoice_items').select('*').eq('invoice_id', id)
       setItems(it || [])
@@ -100,10 +102,21 @@ export default function Editor() {
       invoice_number: number,
       taxable,
       invoice_type: tipo,
-      sdi_status: sdiStatus,
+      sdi_status: 'da_inviare',
+      paid,
     }).eq('id', invoiceId)
     if (error) alert(error.message)
-    else alert('Salvato')
+    else {
+      setSdiStatus('da_inviare')
+      alert('Salvato. Stato: da inviare SDI')
+    }
+  }
+
+  async function togglePaid() {
+    if (!invoiceId) return
+    const next = !paid
+    await supabase.from('invoices').update({ paid: next }).eq('id', invoiceId)
+    setPaid(next)
   }
 
   async function inviaSdi() {
@@ -116,13 +129,7 @@ export default function Editor() {
     const { error } = await supabase.from('invoices').update({ sdi_status: 'inviata_sdi' }).eq('id', invoiceId)
     if (error) return alert(error.message)
     setSdiStatus('inviata_sdi')
-    alert(
-      (tipo === 'nota_credito' ? 'Nota di credito' : 'Fattura') +
-      ' ' + number +
-      ' segnata come INVIATA ALLO SDI (TD' +
-      (tipo === 'nota_credito' ? '04' : '01') +
-      ').\n\nL’invio reale partirà quando colleghiamo Aruba o Fatture in Cloud.'
-    )
+    alert((tipo === 'nota_credito' ? 'Nota di credito' : 'Fattura') + ' ' + number + ' segnata come INVIATA ALLO SDI.')
   }
 
   async function addMaterial(m: Material) {
@@ -216,6 +223,9 @@ export default function Editor() {
         <h1 className="text-2xl font-bold">{titolo} {number}</h1>
         <div className="flex flex-wrap gap-2">
           <button onClick={save} className="border px-4 py-2 rounded-lg">Salva</button>
+          <button onClick={togglePaid} className={`px-4 py-2 rounded-lg ${paid ? 'bg-green-600 text-white' : 'border'}`}>
+            {paid ? 'Già pagata' : 'Segna come pagata'}
+          </button>
           {invoiceId && <Link to={`/stampa/${invoiceId}`} className="bg-slate-900 text-white px-4 py-2 rounded-lg">Anteprima / Stampa</Link>}
           <button onClick={marcaEmail} className="bg-sky-700 text-white px-4 py-2 rounded-lg">{emailSent ? 'Email già inviata' : 'Invia email'}</button>
           <button onClick={inviaSdi} className="bg-emerald-700 text-white px-4 py-2 rounded-lg">
@@ -241,6 +251,9 @@ export default function Editor() {
             <p>SDI: {selected.codice_sdi || '—'}</p>
           </div>
         )}
+        <a href="https://anagrafica-clienti.vercel.app/nuovo" target="_blank" rel="noreferrer" className="inline-block text-sm text-blue-600">
+          Nuovo cliente in Anagrafica
+        </a>
         <input value={oggetto} onChange={e => setOggetto(e.target.value)} placeholder="Oggetto" className="w-full border rounded-lg px-3 py-2" />
         <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Note" className="w-full border rounded-lg px-3 py-2" rows={3} />
       </div>

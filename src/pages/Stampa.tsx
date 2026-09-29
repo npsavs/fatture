@@ -3,6 +3,11 @@ import { Link, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { format, parseISO } from 'date-fns'
 
+const BANCA = 'Intesa Sanpaolo — Filiale di Ladispoli'
+const IBAN = 'IT58L0306939530100000007583'
+const BIC = 'BCITITMM'
+const INTESTATO = 'Nuovo Punto Sicurezza Snc'
+
 export default function Stampa() {
   const { id } = useParams()
   const [inv, setInv] = useState<any>(null)
@@ -25,12 +30,13 @@ export default function Stampa() {
   if (!inv) return <div className="text-center py-10">Caricamento...</div>
 
   const imponibile = items.reduce((s, i) => s + Number(i.quantity) * Number(i.unit_price), 0)
-  const iva = imponibile * 0.22
+  const iva = items.reduce((s, i) => s + Number(i.quantity) * Number(i.unit_price) * (Number(i.vat_rate || 0) / 100), 0)
   const totale = imponibile + iva
   const dataFatt = inv.invoice_date || inv.created_at
   const address = client
     ? [client.address, client.zip, client.city, client.province].filter(Boolean).join(' ')
     : ''
+  const isNc = inv.invoice_type === 'nota_credito' || String(inv.invoice_number || '').startsWith('NC')
 
   return (
     <div className="bg-neutral-200 min-h-screen print:bg-white">
@@ -51,7 +57,7 @@ export default function Stampa() {
         </header>
 
         <p className="text-right font-semibold mt-6 mb-4">
-          FATTURA Nr. {inv.invoice_number} del {format(parseISO(String(dataFatt).slice(0, 10)), 'dd/MM/yyyy')}
+          {isNc ? 'NOTA DI CREDITO' : 'FATTURA'} Nr. {inv.invoice_number} del {format(parseISO(String(dataFatt).slice(0, 10)), 'dd/MM/yyyy')}
         </p>
         <div className="border-t border-neutral-300" />
 
@@ -64,7 +70,7 @@ export default function Stampa() {
           <p>Codice SDI: {client?.codice_sdi || '—'}</p>
         </div>
 
-        <p className="mb-6"><span className="font-semibold">Oggetto: </span>{inv.oggetto || 'FATTURA'}</p>
+        <p className="mb-6"><span className="font-semibold">Oggetto: </span>{inv.oggetto || (isNc ? 'NOTA DI CREDITO' : 'FATTURA')}</p>
 
         <table className="w-full border-collapse">
           <thead>
@@ -81,11 +87,14 @@ export default function Stampa() {
               const tot = Number(row.quantity) * Number(row.unit_price)
               return (
                 <tr key={row.id} className="border-b border-neutral-200">
-                  <td className="py-3">{row.name}{row.description ? ` — ${row.description}` : ''}</td>
+                  <td className="py-3">
+                    {row.name}{row.description ? ` — ${row.description}` : ''}
+                    {row.vat_note ? <div className="text-[10px] text-neutral-500">{row.vat_note}</div> : null}
+                  </td>
                   <td className="text-center">{Number(row.quantity)}</td>
                   <td className="text-right">{Number(row.unit_price).toFixed(2)} €</td>
                   <td className="text-right">{tot.toFixed(2)} €</td>
-                  <td className="text-center">22%</td>
+                  <td className="text-center">{Number(row.vat_rate || 0)}%</td>
                 </tr>
               )
             })}
@@ -94,11 +103,23 @@ export default function Stampa() {
 
         <div className="mt-10 text-right space-y-1">
           <p>Imponibile {imponibile.toFixed(2)} €</p>
-          <p>IVA 22% {iva.toFixed(2)} €</p>
+          <p>IVA {iva.toFixed(2)} €</p>
           <p className="text-2xl font-semibold">Totale {totale.toFixed(2)} €</p>
         </div>
 
-        {inv.notes && <p className="mt-10 text-[11px] whitespace-pre-wrap">{inv.notes}</p>}
+        {inv.paid && (
+          <p className="mt-8 text-center font-semibold text-green-800">FATTURA PAGATA</p>
+        )}
+
+        {inv.notes && <p className="mt-8 text-[11px] whitespace-pre-wrap">{inv.notes}</p>}
+
+        <div className="mt-12 pt-4 border-t border-neutral-300 text-[11px] leading-5">
+          <p className="font-semibold mb-1">Coordinate bancarie</p>
+          <p>Intestazione: {INTESTATO}</p>
+          <p>{BANCA}</p>
+          <p>IBAN: {IBAN}</p>
+          <p>SWIFT/BIC: {BIC}</p>
+        </div>
       </article>
     </div>
   )

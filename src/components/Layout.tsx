@@ -8,6 +8,7 @@ export default function Layout() {
         <nav className="flex gap-4 text-sm">
           <Link to="/" className="font-semibold">Fatture NPS</Link>
           <Link to="/nuovo">+ Nuova fattura</Link>
+<Link to="/fornitori">Fornitori</Link>
         </nav>
         <button onClick={() => supabase.auth.signOut()} className="text-sm text-slate-300">Esci</button>
       </header>
