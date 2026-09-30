@@ -1,110 +1,166 @@
-const DB = 'nps-archivio'
-const STORE = 'handles'
-const KEY = 'root'
+import { useEffect, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
+import { format, parseISO } from 'date-fns'
+import { nomeFileSicuro, pdfSemplice, salvaInArchivio } from '../lib/archivio'
 
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB, 1)
-    req.onupgradeneeded = () => req.result.createObjectStore(STORE)
-    req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error)
-  })
-}
+const BANCA = 'Intesa Sanpaolo - Filiale di Ladispoli'
+const IBAN = 'IT58L0306939530100000007583'
+const BIC = 'BCITITMM'
+const INTESTATO = 'Nuovo Punto Sicurezza Snc'
 
-async function saveHandle(handle: FileSystemDirectoryHandle) {
-  const db = await openDb()
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readwrite')
-    tx.objectStore(STORE).put(handle, KEY)
-    tx.oncomplete = () => resolve()
-    tx.onerror = () => reject(tx.error)
-  })
-}
+export default function Stampa() {
+  const { id } = useParams()
+  const [inv, setInv] = useState<any>(null)
+  const [client, setClient] = useState<any>(null)
+  const [items, setItems] = useState<any[]>([])
 
-async function loadHandle(): Promise<FileSystemDirectoryHandle | null> {
-  const db = await openDb()
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readonly')
-    const req = tx.objectStore(STORE).get(KEY)
-    req.onsuccess = () => resolve(req.result || null)
-    req.onerror = () => reject(req.error)
-  })
-}
+  useEffect(() => {
+    load()
+  }, [id])
 
-export function nomeFileSicuro(nome: string, numero: string) {
-  const n = (nome || 'SenzaNome').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim()
-  const num = (numero || 'senn').replace(/[\\/:*?"<>|]+/g, '-').replace(/\//g, '-')
-  return n + '_' + num + '.pdf'
-}
-
-export async function collegaArchivio() {
-  const anyWin = window as any
-  if (!anyWin.showDirectoryPicker) {
-    alert('Usa Chrome o Edge. Poi scegli la cartella archivio.')
-    return null
+  async function load() {
+    const { data: q } = await supabase.from('invoices').select('*').eq('id', id).single()
+    setInv(q)
+    if (q && q.client_id) {
+      const { data: c } = await supabase.from('clients').select('*').eq('id', q.client_id).single()
+      setClient(c)
+    }
+    const { data: it } = await supabase.from('invoice_items').select('*').eq('invoice_id', id)
+    setItems(it || [])
   }
-  const handle = await anyWin.showDirectoryPicker({ mode: 'readwrite' })
-  await saveHandle(handle)
-  return handle
-}
 
-async function root(): Promise<FileSystemDirectoryHandle | null> {
-  const h = await loadHandle()
-  if (!h) return collegaArchivio()
-  const anyH = h as any
-  if (anyH.requestPermission) {
-    const p = await anyH.requestPermission({ mode: 'readwrite' })
-    if (p !== 'granted') return collegaArchivio()
+  if (!inv) return <div className="text-center py-10">Caricamento...</div>
+
+  const imponibile = items.reduce((s, i) => s + Number(i.quantity) * Number(i.unit_price), 0)
+  const iva = items.reduce((s, i) => s + Number(i.quantity) * Number(i.unit_price) * (Number(i.vat_rate || 0) / 100), 0)
+  const totale = imponibile + iva
+  const dataFatt = inv.invoice_date || inv.created_at
+  const address = client
+    ? [client.address, client.zip, client.city, client.province].filter(Boolean).join(' ')
+    : ''
+  const isNc = inv.invoice_type === 'nota_credito' || String(inv.invoice_number || '').startsWith('NC')
+
+  async function salvaArchivio() {
+    const nome = (client && client.name) || 'Cliente'
+    const numero = inv.invoice_number || 'senn'
+    const anno = String(inv.invoice_date || inv.created_at || '').slice(0, 4) || String(new Date().getFullYear())
+    const fileName = nomeFileSicuro(nome, numero)
+    const righe = [
+      (isNc ? 'NOTA DI CREDITO ' : 'FATTURA ') + numero,
+      'Data ' + String(dataFatt).slice(0, 10),
+      'Cliente: ' + nome,
+      'CF/PIVA: ' + ((client && client.cf_piva) || ''),
+      '',
+    ]
+    items.forEach(row => {
+      const totRiga = Number(row.quantity) * Number(row.unit_price)
+      righe.push(row.name + '  qta ' + row.quantity + '  ' + totRiga.toFixed(2) + ' EUR')
+    })
+    righe.push('')
+    righe.push('Imponibile ' + imponibile.toFixed(2))
+    righe.push('IVA ' + iva.toFixed(2))
+    righe.push('Totale ' + totale.toFixed(2))
+    const ok = await salvaInArchivio({
+      tipo: 'clienti',
+      anno,
+      fileName,
+      contenuto: pdfSemplice(righe),
+    })
+    if (ok) alert('Salvato in archivio/clienti/' + anno + '/' + fileName)
   }
-  return h
-}
 
-export async function salvaInArchivio(opts: {
-  tipo: 'clienti' | 'fornitori'
-  anno: string
-  fileName: string
-  contenuto: string
-}) {
-  const base = await root()
-  if (!base) return false
-  const cartellaTipo = await base.getDirectoryHandle(opts.tipo, { create: true })
-  const cartellaAnno = await cartellaTipo.getDirectoryHandle(String(opts.anno), { create: true })
-  const file = await cartellaAnno.getFileHandle(opts.fileName, { create: true })
-  const w = await file.createWritable()
-  await w.write(contenuto)
-  await w.close()
-  return true
-}
+  return (
+    <div className="bg-neutral-200 min-h-screen print:bg-white">
+      <div className="no-print flex gap-3 max-w-[210mm] mx-auto py-4 px-4">
+        <Link to={'/fattura/' + id} className="bg-white border px-4 py-2 text-sm">Modifica</Link>
+        <button type="button" onClick={() => window.print()} className="bg-neutral-800 text-white px-4 py-2 text-sm">
+          Stampa / PDF
+        </button>
+        <button type="button" onClick={salvaArchivio} className="bg-blue-700 text-white px-4 py-2 text-sm">
+          Salva in archivio
+        </button>
+      </div>
 
-export function pdfSemplice(righe: string[]) {
-  const lines = righe.map(r => (r || '').slice(0, 110))
-  const start = 100
-  let content = 'BT /F1 11 Tf 50 ' + start + ' Td\n'
-  lines.forEach((line, i) => {
-    const safe = line.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)')
-    if (i === 0) content += '(' + safe + ') Tj\n'
-    else content += '0 -16 Td (' + safe + ') Tj\n'
-  })
-  content += 'ET'
-  const stream = content
-  const objects = [
-    '1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj',
-    '2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj',
-    '3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj',
-    '4 0 obj << /Length ' + stream.length + ' >> stream\n' + stream + '\nendstream endobj',
-    '5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj',
-  ]
-  let pdf = '%PDF-1.4\n'
-  const offsets = [0]
-  objects.forEach(o => {
-    offsets.push(pdf.length)
-    pdf += o + '\n'
-  })
-  const xref = pdf.length
-  pdf += 'xref\n0 6\n0000000000 65535 f \n'
-  for (let i = 1; i <= 5; i++) {
-    pdf += String(offsets[i]).padStart(10, '0') + ' 00000 n \n'
-  }
-  pdf += 'trailer << /Size 6 /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF'
-  return pdf
+      <article className="bg-white w-[210mm] min-h-[297mm] mx-auto px-12 py-10 text-[12px] print:w-auto">
+        <header className="flex justify-between items-start">
+          <img src="/logo.png" alt="NPS" className="h-[110px] w-[110px] object-contain" />
+          <div className="text-right text-[11px] leading-5">
+            <p className="font-semibold">Nuovo Punto Sicurezza snc</p>
+            <p>Via Claudia 50</p>
+            <p>00062 - Bracciano (RM)</p>
+            <p>P.IVA 05678201004</p>
+          </div>
+        </header>
+
+        <p className="text-right font-semibold mt-6 mb-4">
+          {isNc ? 'NOTA DI CREDITO' : 'FATTURA'} Nr. {inv.invoice_number} del {format(parseISO(String(dataFatt).slice(0, 10)), 'dd/MM/yyyy')}
+        </p>
+        <div className="border-t border-neutral-300" />
+
+        <div className="text-right mt-8 mb-8 leading-5">
+          <p className="text-[10px] tracking-[0.2em] text-neutral-500 mb-1">DESTINATARIO</p>
+          <p className="font-semibold uppercase">{(client && client.name) || 'CLIENTE'}</p>
+          {address ? <p>{address}</p> : null}
+          <p>CF / P.IVA: {(client && client.cf_piva) || '-'}</p>
+          <p>PEC: {(client && client.pec) || '-'}</p>
+          <p>Codice SDI: {(client && client.codice_sdi) || '-'}</p>
+        </div>
+
+        <p className="mb-6">
+          <span className="font-semibold">Oggetto: </span>
+          {inv.oggetto || (isNc ? 'NOTA DI CREDITO' : 'FATTURA')}
+        </p>
+
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="border-y border-neutral-400 text-[10px]">
+              <th className="text-left py-2">DESCRIZIONE</th>
+              <th className="text-center py-2 w-10">QTA</th>
+              <th className="text-right py-2">PREZZO</th>
+              <th className="text-right py-2">TOTALE</th>
+              <th className="text-center py-2">IVA</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map(row => {
+              const tot = Number(row.quantity) * Number(row.unit_price)
+              return (
+                <tr key={row.id} className="border-b border-neutral-200">
+                  <td className="py-3">
+                    {row.name}{row.description ? ' - ' + row.description : ''}
+                    {row.vat_note ? <div className="text-[10px] text-neutral-500">{row.vat_note}</div> : null}
+                  </td>
+                  <td className="text-center">{Number(row.quantity)}</td>
+                  <td className="text-right">{Number(row.unit_price).toFixed(2)} EUR</td>
+                  <td className="text-right">{tot.toFixed(2)} EUR</td>
+                  <td className="text-center">{Number(row.vat_rate || 0)}%</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+
+        <div className="mt-10 text-right space-y-1">
+          <p>Imponibile {imponibile.toFixed(2)} EUR</p>
+          <p>IVA {iva.toFixed(2)} EUR</p>
+          <p className="text-2xl font-semibold">Totale {totale.toFixed(2)} EUR</p>
+        </div>
+
+        {inv.paid ? (
+          <p className="mt-8 text-center font-semibold text-green-800">FATTURA PAGATA</p>
+        ) : null}
+
+        {inv.notes ? <p className="mt-8 text-[11px] whitespace-pre-wrap">{inv.notes}</p> : null}
+
+        <div className="mt-12 pt-4 border-t border-neutral-300 text-[11px] leading-5">
+          <p className="font-semibold mb-1">Coordinate bancarie</p>
+          <p>Intestazione: {INTESTATO}</p>
+          <p>{BANCA}</p>
+          <p>IBAN: {IBAN}</p>
+          <p>SWIFT/BIC: {BIC}</p>
+        </div>
+      </article>
+    </div>
+  )
 }
