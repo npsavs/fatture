@@ -1,5 +1,3 @@
-import Archivio from './pages/Archivio'
-import Stampa from './pages/Stampa'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
@@ -8,6 +6,9 @@ import Layout from './components/Layout'
 import Lista from './pages/Lista'
 import Editor from './pages/Editor'
 import Fornitori from './pages/Fornitori'
+import Stampa from './pages/Stampa'
+import Archivio from './pages/Archivio'
+
 export default function App() {
   const [session, setSession] = useState<any>(undefined)
 
@@ -27,8 +28,8 @@ export default function App() {
           <Route path="/" element={<Lista />} />
           <Route path="/nuovo" element={<Editor />} />
           <Route path="/fattura/:id" element={<Editor />} />
-<Route path="/stampa/:id" element={<Stampa />} />
-<Route path="/fornitori" element={<Fornitori />} />
+          <Route path="/stampa/:id" element={<Stampa />} />
+          <Route path="/fornitori" element={<Fornitori />} />
           <Route path="/archivio" element={<Archivio />} />
         </Route>
       </Routes>

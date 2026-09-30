@@ -9,9 +9,8 @@ export default function Layout() {
           <Link to="/" className="font-semibold">Fatture NPS</Link>
           <Link to="/nuovo">+ Nuova fattura</Link>
           <Link to="/fornitori">Fornitori</Link>
-          <Link to="/archivio">Archivio</Link>
         </nav>
-        <button onClick={() => supabase.auth.signOut()} className="text-sm text-slate-300">Esci</button>
+        <button type="button" onClick={() => supabase.auth.signOut()} className="text-sm text-slate-300">Esci</button>
       </header>
       <main className="max-w-5xl mx-auto p-4">
         <Outlet />
