@@ -1,3 +1,4 @@
+import { nomeFileSicuro, pdfSemplice, salvaInArchivio } from '../lib/archivio'
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
@@ -198,7 +199,24 @@ export default function Fornitori() {
     load()
     alert('Fattura salvata. Fornitore aggiornato anche in Anagrafica.')
   }
-
+    const anno = String(preview.data || '').slice(0, 4) || String(new Date().getFullYear())
+        const pdfName = nomeFileSicuro(preview.fornitore || fileName, preview.numero || 'senn')
+    const righe = [
+      'FATTURA FORNITORE ' + (preview.numero || ''),
+      'Data ' + (preview.data || ''),
+      'Fornitore: ' + (preview.fornitore || ''),
+      'PIVA: ' + (preview.piva || ''),
+      'Totale ' + (preview.totale || ''),
+    ]
+    ;(preview.linee || []).forEach((l: any) => {
+      righe.push((l.desc || '') + '  ' + (l.tot || ''))
+    })
+    await salvaInArchivio({
+      tipo: 'fornitori',
+      anno,
+      fileName,
+      contenuto: pdfSemplice(righe),
+    })
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Fatture fornitori</h1>

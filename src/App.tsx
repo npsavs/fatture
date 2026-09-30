@@ -1,3 +1,4 @@
+import Archivio from './pages/Archivio'
 import Stampa from './pages/Stampa'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
@@ -28,6 +29,7 @@ export default function App() {
           <Route path="/fattura/:id" element={<Editor />} />
 <Route path="/stampa/:id" element={<Stampa />} />
 <Route path="/fornitori" element={<Fornitori />} />
+          <Route path="/archivio" element={<Archivio />} />
         </Route>
       </Routes>
     </BrowserRouter>
