@@ -37,7 +37,6 @@ export default function Lista() {
   const [filtro, setFiltro] = useState<'tutte' | 'inviate' | 'da_inviare' | 'pagate' | 'non_pagate'>('tutte')
   const [searchClient, setSearchClient] = useState('')
   const [clientId, setClientId] = useState('')
-  const [newC, setNewC] = useState({ name: '', phone: '', email: '', cf_piva: '' })
 
   useEffect(() => { load() }, [])
 
@@ -62,24 +61,9 @@ export default function Lista() {
     load()
   }
 
-  async function addCliente(e: React.FormEvent) {
-    e.preventDefault()
-    if (!newC.name.trim()) return
-    const { data, error } = await supabase.from('clients').insert({
-      name: newC.name.trim(),
-      phone: newC.phone || null,
-      email: newC.email || null,
-      cf_piva: newC.cf_piva || null,
-    }).select().single()
-    if (error) return alert(error.message)
-    setClients(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)))
-    setClientId(data.id)
-    setNewC({ name: '', phone: '', email: '', cf_piva: '' })
-  }
-
   function crea(tipo: 'fattura' | 'nota_credito') {
     if (!clientId) return alert('Seleziona o crea prima il cliente')
-    navigate(`/nuovo?cliente=${clientId}&tipo=${tipo}`)
+    navigate('/nuovo?cliente=' + clientId + '&tipo=' + tipo)
   }
 
   const now = new Date()
@@ -172,7 +156,7 @@ export default function Lista() {
         </div>
       </div>
 
-      {tab === 'emesse' && (
+      {tab === 'emesse' ? (
         <div className="bg-white rounded-xl shadow p-4 space-y-3">
           <h2 className="font-semibold">1. Scegli o crea il cliente</h2>
           <input value={searchClient} onChange={e => setSearchClient(e.target.value)} placeholder="Cerca cliente..." className="w-full border rounded-lg px-3 py-2" />
@@ -183,13 +167,8 @@ export default function Lista() {
               </button>
             ))}
           </div>
-          {selected && <p className="text-sm text-green-700">Cliente: <strong>{selected.name}</strong></p>}
-                   <a
-            href="https://anagrafica-clienti.vercel.app/nuovo"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-block bg-blue-600 text-white px-4 py-2 rounded-lg"
-          >
+          {selected ? <p className="text-sm text-green-700">Cliente: <strong>{selected.name}</strong></p> : null}
+          <a href="https://anagrafica-clienti.vercel.app/nuovo" target="_blank" rel="noreferrer" className="inline-block bg-blue-600 text-white px-4 py-2 rounded-lg">
             Nuovo cliente (Anagrafica)
           </a>
           <div className="flex gap-2">
@@ -197,16 +176,16 @@ export default function Lista() {
             <button type="button" onClick={() => crea('nota_credito')} className="border px-4 py-2 rounded-lg">Crea nota di credito</button>
           </div>
         </div>
-      )}
+      ) : null}
 
       <input value={q} onChange={e => setQ(e.target.value)} placeholder="Cerca per numero o nome..." className="w-full border rounded-lg px-3 py-2 bg-white" />
 
       {tab === 'emesse' ? (
         <div className="bg-white rounded-xl shadow divide-y">
-          {filteredRows.length === 0 && <p className="p-6 text-slate-500">Nessuna fattura</p>}
+          {filteredRows.length === 0 ? <p className="p-6 text-slate-500">Nessuna fattura</p> : null}
           {filteredRows.map(r => (
             <div key={r.id} className="px-4 py-3 flex flex-wrap items-center gap-3">
-              <Link to={`/fattura/${r.id}`} className="flex-1 min-w-[160px]">
+              <Link to={'/fattura/' + r.id} className="flex-1 min-w-[160px]">
                 <p className="font-medium">{r.invoice_type === 'nota_credito' ? 'NC ' : ''}{r.invoice_number} · {r.clients?.name || 'Senza cliente'}</p>
                 <p className="text-sm text-slate-500">{r.invoice_date} · € {Number(r.taxable || 0).toFixed(2)}</p>
               </Link>
@@ -219,15 +198,17 @@ export default function Lista() {
         </div>
       ) : (
         <div className="bg-white rounded-xl shadow divide-y">
-          <div className="p-3 text-sm"><Link to="/fornitori" className="text-blue-600">+ Carica fattura fornitore</Link></div>
-          {filteredRicevute.length === 0 && <p className="p-6 text-slate-500">Nessuna fattura ricevuta</p>}
+          <div className="p-3 text-sm">
+            <Link to="/fornitori" className="text-blue-600">Apri fornitori / nuovo fornitore</Link>
+          </div>
+          {filteredRicevute.length === 0 ? <p className="p-6 text-slate-500">Nessuna fattura ricevuta</p> : null}
           {filteredRicevute.map(r => (
             <div key={r.id} className="px-4 py-3 flex flex-wrap items-center gap-3">
-              <div className="flex-1">
+              <Link to={'/ricevuta/' + r.id} className="flex-1">
                 <p className="font-medium">{r.suppliers?.name} · {r.invoice_number || 'Senza numero'}</p>
-                <p className="text-sm text-slate-500">{r.invoice_date || ''} {r.amount ? `· € ${Number(r.amount).toFixed(2)}` : ''}</p>
-              </div>
-              {r.pdf_url && <a href={r.pdf_url} target="_blank" rel="noreferrer" className="text-blue-600 text-sm">PDF</a>}
+                <p className="text-sm text-slate-500">{r.invoice_date || ''} {r.amount ? '· € ' + Number(r.amount).toFixed(2) : ''}</p>
+              </Link>
+              {r.pdf_url ? <a href={r.pdf_url} target="_blank" rel="noreferrer" className="text-blue-600 text-sm">PDF</a> : null}
               <button type="button" onClick={() => setPaidRicevuta(r.id, !r.paid)} className={`text-xs px-3 py-1 rounded-full ${r.paid ? 'bg-green-600 text-white' : 'bg-slate-100'}`}>
                 {r.paid ? 'Pagata' : 'Segna pagata'}
               </button>
