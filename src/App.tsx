@@ -1,15 +1,18 @@
-import Ricevuta from './pages/Ricevuta'
-import Fornitori from './pages/Fornitori'
 import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
 import Login from './pages/Login'
 import Layout from './components/Layout'
+import Home from './pages/Home'
 import Lista from './pages/Lista'
 import Editor from './pages/Editor'
 import Stampa from './pages/Stampa'
+import Fornitori from './pages/Fornitori'
+import Ricevuta from './pages/Ricevuta'
+import Clienti from './pages/Clienti'
+import Sdi from './pages/Sdi'
 
-function DaClienteAFattura() {
+function DaCliente() {
   const { id } = useParams()
   return <Navigate to={'/nuovo?cliente=' + id} replace />
 }
@@ -30,14 +33,18 @@ export default function App() {
       <Routes>
         <Route path="/login" element={session ? <Navigate to="/" /> : <Login />} />
         <Route element={session ? <Layout /> : <Navigate to="/login" />}>
-          <Route path="/" element={<Lista />} />
+          <Route path="/" element={<Home />} />
+          <Route path="/emesse" element={<Lista />} />
+          <Route path="/ricevute" element={<Lista />} />
           <Route path="/nuovo" element={<Editor />} />
           <Route path="/fattura/:id" element={<Editor />} />
           <Route path="/stampa/:id" element={<Stampa />} />
-          <Route path="/cliente/:id" element={<DaClienteAFattura />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
           <Route path="/fornitori" element={<Fornitori />} />
           <Route path="/ricevuta/:id" element={<Ricevuta />} />
+          <Route path="/clienti" element={<Clienti />} />
+          <Route path="/sdi" element={<Sdi />} />
+          <Route path="/cliente/:id" element={<DaCliente />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
     </BrowserRouter>

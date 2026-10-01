@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 export default function Ricevuta() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const [row, setRow] = useState<any>(null)
 
   useEffect(() => {
@@ -15,13 +16,26 @@ export default function Ricevuta() {
       .then(({ data }) => setRow(data))
   }, [id])
 
+  async function elimina() {
+    const ok = confirm('Eliminare questa fattura fornitore?')
+    if (!ok) return
+    const { error } = await supabase.from('supplier_invoices').delete().eq('id', id)
+    if (error) return alert(error.message)
+    navigate('/fornitori')
+  }
+
   if (!row) return <div className="p-10 text-center">Caricamento...</div>
 
   const nome = row.suppliers ? row.suppliers.name : 'Fornitore'
 
   return (
     <div className="space-y-4">
-      <Link to="/fornitori" className="text-blue-600 text-sm">Torna ai fornitori</Link>
+      <div className="flex flex-wrap gap-2 items-center">
+        <Link to="/fornitori" className="text-blue-600 text-sm">Torna ai fornitori</Link>
+        <button type="button" onClick={elimina} className="bg-red-100 text-red-700 px-4 py-2 rounded-lg text-sm">
+          Elimina fattura
+        </button>
+      </div>
       <h1 className="text-2xl font-bold">{nome}</h1>
       <div className="bg-white rounded-xl shadow p-4 space-y-2 text-sm">
         <p>Numero: {row.invoice_number || '-'}</p>

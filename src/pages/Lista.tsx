@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Client } from '../types'
 
-const STATI: Record<string, string> = {
+const STATI: any = {
   bozza: 'Bozza',
   da_inviare: 'Da inviare SDI',
   inviata_sdi: 'Inviata SDI',
@@ -18,7 +18,6 @@ function statoClass(s: string) {
   if (s === 'inviata_sdi') return 'bg-blue-200 text-blue-900'
   if (s === 'consegnata') return 'bg-green-200 text-green-900'
   if (s === 'scartata') return 'bg-red-200 text-red-900'
-  if (s === 'mancata_consegna') return 'bg-orange-200 text-orange-900'
   return 'bg-slate-100 text-slate-700'
 }
 
@@ -26,17 +25,29 @@ function trimestre(d: Date) {
   return Math.floor(d.getMonth() / 3) + 1
 }
 
+function annoDi(r: any) {
+  return String(r.invoice_date || r.created_at || '').slice(0, 4)
+}
+
 export default function Lista() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const paginaRicevute = location.pathname.indexOf('ricevute') >= 0
+
   const [rows, setRows] = useState<any[]>([])
   const [ricevute, setRicevute] = useState<any[]>([])
   const [itemsAll, setItemsAll] = useState<any[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [q, setQ] = useState('')
-  const [tab, setTab] = useState<'emesse' | 'ricevute'>('emesse')
-  const [filtro, setFiltro] = useState<'tutte' | 'inviate' | 'da_inviare' | 'pagate' | 'non_pagate'>('tutte')
+  const [tab, setTab] = useState(paginaRicevute ? 'ricevute' : 'emesse')
+  const [filtro, setFiltro] = useState('tutte')
+  const [filtroAnno, setFiltroAnno] = useState(String(new Date().getFullYear()))
   const [searchClient, setSearchClient] = useState('')
   const [clientId, setClientId] = useState('')
+
+  useEffect(() => {
+    setTab(paginaRicevute ? 'ricevute' : 'emesse')
+  }, [paginaRicevute])
 
   useEffect(() => { load() }, [])
 
@@ -61,9 +72,14 @@ export default function Lista() {
     load()
   }
 
-  function crea(tipo: 'fattura' | 'nota_credito') {
+  function crea(tipo: string) {
     if (!clientId) return alert('Seleziona o crea prima il cliente')
     navigate('/nuovo?cliente=' + clientId + '&tipo=' + tipo)
+  }
+
+  function vaiTab(t: string) {
+    setTab(t)
+    navigate(t === 'ricevute' ? '/ricevute' : '/emesse')
   }
 
   const now = new Date()
@@ -98,22 +114,29 @@ export default function Lista() {
     return { anno, trim, ricevuteAnno: totR(ricAnno), ricevuteTrim: totR(ricTrim) }
   }, [rows, ricevute, itemsAll, year, qNow])
 
-  const filteredClients = clients.filter(c => c.name.toLowerCase().includes(searchClient.toLowerCase()))
+  const filteredClients = clients.filter(c =>
+    (c as any).kind !== 'fornitore' && c.name.toLowerCase().includes(searchClient.toLowerCase())
+  )
   const selected = clients.find(c => c.id === clientId)
 
   const filteredRows = rows.filter(r => {
     const t = q.toLowerCase()
     if (t && !(String(r.invoice_number || '').toLowerCase().includes(t) || String(r.clients?.name || '').toLowerCase().includes(t))) return false
+    if (filtroAnno && annoDi(r) !== filtroAnno) return false
     if (filtro === 'inviate') return r.sdi_status === 'inviata_sdi' || r.sdi_status === 'consegnata'
     if (filtro === 'da_inviare') return r.sdi_status === 'da_inviare' || r.sdi_status === 'bozza'
     if (filtro === 'pagate') return !!r.paid
     if (filtro === 'non_pagate') return !r.paid
+    if (filtro === 'nc') return r.invoice_type === 'nota_credito'
+    if (filtro === 'fattura') return (r.invoice_type || 'fattura') !== 'nota_credito'
+    if (filtro === 'scartata') return r.sdi_status === 'scartata'
     return true
   })
 
   const filteredRicevute = ricevute.filter(r => {
     const t = q.toLowerCase()
     if (t && !(String(r.invoice_number || '').toLowerCase().includes(t) || String(r.suppliers?.name || '').toLowerCase().includes(t))) return false
+    if (filtroAnno && annoDi(r) !== filtroAnno) return false
     if (filtro === 'pagate') return !!r.paid
     if (filtro === 'non_pagate') return !r.paid
     return true
@@ -121,97 +144,80 @@ export default function Lista() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Fatture</h1>
-
+      <h1 className="text-2xl font-bold">{tab === 'ricevute' ? 'Fatture ricevute' : 'Fatture emesse'}</h1>
       <div className="flex flex-wrap gap-2 bg-white p-3 rounded-xl shadow">
-        <button type="button" onClick={() => setTab('emesse')} className={`px-3 py-2 rounded-lg text-sm ${tab === 'emesse' ? 'bg-slate-900 text-white' : 'border'}`}>Inviate / emesse</button>
-        <button type="button" onClick={() => setTab('ricevute')} className={`px-3 py-2 rounded-lg text-sm ${tab === 'ricevute' ? 'bg-slate-900 text-white' : 'border'}`}>Ricevute fornitori</button>
-        <button type="button" onClick={() => setFiltro('tutte')} className={`px-3 py-2 rounded-lg text-sm ${filtro === 'tutte' ? 'bg-blue-700 text-white' : 'border'}`}>Tutte</button>
-        <button type="button" onClick={() => setFiltro('inviate')} className={`px-3 py-2 rounded-lg text-sm ${filtro === 'inviate' ? 'bg-blue-700 text-white' : 'border'}`}>Inviate SDI</button>
-        <button type="button" onClick={() => setFiltro('da_inviare')} className={`px-3 py-2 rounded-lg text-sm ${filtro === 'da_inviare' ? 'bg-blue-700 text-white' : 'border'}`}>Da inviare SDI</button>
-        <button type="button" onClick={() => setFiltro('pagate')} className={`px-3 py-2 rounded-lg text-sm ${filtro === 'pagate' ? 'bg-green-700 text-white' : 'border'}`}>Pagate</button>
-        <button type="button" onClick={() => setFiltro('non_pagate')} className={`px-3 py-2 rounded-lg text-sm ${filtro === 'non_pagate' ? 'bg-green-700 text-white' : 'border'}`}>Non pagate</button>
+        <button type="button" onClick={() => vaiTab('emesse')} className={'px-3 py-2 rounded-lg text-sm ' + (tab === 'emesse' ? 'bg-slate-900 text-white' : 'border')}>Emesse</button>
+        <button type="button" onClick={() => vaiTab('ricevute')} className={'px-3 py-2 rounded-lg text-sm ' + (tab === 'ricevute' ? 'bg-slate-900 text-white' : 'border')}>Ricevute</button>
+        <select value={filtroAnno} onChange={e => setFiltroAnno(e.target.value)} className="border rounded-lg px-2 py-2 text-sm bg-white">
+          <option value="">Tutti gli anni</option>
+          <option value="2026">2026</option>
+          <option value="2025">2025</option>
+        </select>
+        <button type="button" onClick={() => setFiltro('tutte')} className={'px-3 py-2 rounded-lg text-sm ' + (filtro === 'tutte' ? 'bg-blue-700 text-white' : 'border')}>Tutte</button>
+        <button type="button" onClick={() => setFiltro('fattura')} className={'px-3 py-2 rounded-lg text-sm ' + (filtro === 'fattura' ? 'bg-blue-700 text-white' : 'border')}>Solo fatture</button>
+        <button type="button" onClick={() => setFiltro('nc')} className={'px-3 py-2 rounded-lg text-sm ' + (filtro === 'nc' ? 'bg-blue-700 text-white' : 'border')}>Note credito</button>
+        <button type="button" onClick={() => setFiltro('inviate')} className={'px-3 py-2 rounded-lg text-sm ' + (filtro === 'inviate' ? 'bg-blue-700 text-white' : 'border')}>Inviate SDI</button>
+        <button type="button" onClick={() => setFiltro('da_inviare')} className={'px-3 py-2 rounded-lg text-sm ' + (filtro === 'da_inviare' ? 'bg-blue-700 text-white' : 'border')}>Da inviare SDI</button>
+        <button type="button" onClick={() => setFiltro('scartata')} className={'px-3 py-2 rounded-lg text-sm ' + (filtro === 'scartata' ? 'bg-red-700 text-white' : 'border')}>Scartate</button>
+        <button type="button" onClick={() => setFiltro('pagate')} className={'px-3 py-2 rounded-lg text-sm ' + (filtro === 'pagate' ? 'bg-green-700 text-white' : 'border')}>Pagate</button>
+        <button type="button" onClick={() => setFiltro('non_pagate')} className={'px-3 py-2 rounded-lg text-sm ' + (filtro === 'non_pagate' ? 'bg-green-700 text-white' : 'border')}>Non pagate</button>
       </div>
-
       <div className="grid md:grid-cols-2 gap-3">
-        <div className="bg-white rounded-xl shadow p-4 space-y-1">
-          <p className="text-xs text-slate-500">Fatturato {year} (solo fatture)</p>
-          <p>Imponibile <strong>€ {stats.anno.imponibile.toFixed(2)}</strong></p>
-          <p>IVA <strong>€ {stats.anno.iva.toFixed(2)}</strong></p>
-          <p className="text-xl font-bold">Totale € {stats.anno.totale.toFixed(2)}</p>
-        </div>
-        <div className="bg-white rounded-xl shadow p-4 space-y-1">
-          <p className="text-xs text-slate-500">Fatturato T{qNow} {year} (solo fatture)</p>
-          <p>Imponibile <strong>€ {stats.trim.imponibile.toFixed(2)}</strong></p>
-          <p>IVA <strong>€ {stats.trim.iva.toFixed(2)}</strong></p>
-          <p className="text-xl font-bold">Totale € {stats.trim.totale.toFixed(2)}</p>
+        <div className="bg-white rounded-xl shadow p-4">
+          <p className="text-xs text-slate-500">Fatturato {year}</p>
+          <p className="text-xl font-bold">EUR {stats.anno.totale.toFixed(2)}</p>
         </div>
         <div className="bg-white rounded-xl shadow p-4">
-          <p className="text-xs text-slate-500">Fatture fornitori {year}</p>
-          <p className="text-xl font-bold">€ {stats.ricevuteAnno.toFixed(2)}</p>
+          <p className="text-xs text-slate-500">Fatturato T{qNow} {year}</p>
+          <p className="text-xl font-bold">EUR {stats.trim.totale.toFixed(2)}</p>
         </div>
         <div className="bg-white rounded-xl shadow p-4">
-          <p className="text-xs text-slate-500">Fatture fornitori T{qNow}</p>
-          <p className="text-xl font-bold">€ {stats.ricevuteTrim.toFixed(2)}</p>
+          <p className="text-xs text-slate-500">Fornitori {year}</p>
+          <p className="text-xl font-bold">EUR {stats.ricevuteAnno.toFixed(2)}</p>
+        </div>
+        <div className="bg-white rounded-xl shadow p-4">
+          <p className="text-xs text-slate-500">Fornitori T{qNow}</p>
+          <p className="text-xl font-bold">EUR {stats.ricevuteTrim.toFixed(2)}</p>
         </div>
       </div>
-
       {tab === 'emesse' ? (
         <div className="bg-white rounded-xl shadow p-4 space-y-3">
-          <h2 className="font-semibold">1. Scegli o crea il cliente</h2>
+          <h2 className="font-semibold">Scegli il cliente</h2>
           <input value={searchClient} onChange={e => setSearchClient(e.target.value)} placeholder="Cerca cliente..." className="w-full border rounded-lg px-3 py-2" />
           <div className="max-h-32 overflow-auto border rounded-lg">
             {filteredClients.map(c => (
-              <button key={c.id} type="button" onClick={() => setClientId(c.id)} className={`block w-full text-left px-3 py-2 text-sm ${clientId === c.id ? 'bg-blue-50 font-medium' : ''}`}>
-                {c.name}
-              </button>
+              <button key={c.id} type="button" onClick={() => setClientId(c.id)} className={'block w-full text-left px-3 py-2 text-sm ' + (clientId === c.id ? 'bg-blue-50 font-medium' : '')}>{c.name}</button>
             ))}
           </div>
-          {selected ? <p className="text-sm text-green-700">Cliente: <strong>{selected.name}</strong></p> : null}
-          <a href="https://anagrafica-clienti.vercel.app/nuovo" target="_blank" rel="noreferrer" className="inline-block bg-blue-600 text-white px-4 py-2 rounded-lg">
-            Nuovo cliente (Anagrafica)
-          </a>
-          <div className="flex gap-2">
-            <button type="button" onClick={() => crea('fattura')} className="bg-slate-900 text-white px-4 py-2 rounded-lg">Crea fattura</button>
-            <button type="button" onClick={() => crea('nota_credito')} className="border px-4 py-2 rounded-lg">Crea nota di credito</button>
-          </div>
+          {selected ? <p className="text-sm text-green-700">Cliente: {selected.name}</p> : null}
+          <button type="button" onClick={() => crea('fattura')} className="bg-slate-900 text-white px-4 py-2 rounded-lg">Crea fattura</button>
+          <button type="button" onClick={() => crea('nota_credito')} className="border px-4 py-2 rounded-lg ml-2">Crea nota di credito</button>
         </div>
       ) : null}
-
-      <input value={q} onChange={e => setQ(e.target.value)} placeholder="Cerca per numero o nome..." className="w-full border rounded-lg px-3 py-2 bg-white" />
-
+      <input value={q} onChange={e => setQ(e.target.value)} placeholder="Cerca numero o nome..." className="w-full border rounded-lg px-3 py-2 bg-white" />
       {tab === 'emesse' ? (
         <div className="bg-white rounded-xl shadow divide-y">
           {filteredRows.length === 0 ? <p className="p-6 text-slate-500">Nessuna fattura</p> : null}
           {filteredRows.map(r => (
             <div key={r.id} className="px-4 py-3 flex flex-wrap items-center gap-3">
-              <Link to={'/fattura/' + r.id} className="flex-1 min-w-[160px]">
-                <p className="font-medium">{r.invoice_type === 'nota_credito' ? 'NC ' : ''}{r.invoice_number} · {r.clients?.name || 'Senza cliente'}</p>
-                <p className="text-sm text-slate-500">{r.invoice_date} · € {Number(r.taxable || 0).toFixed(2)}</p>
+              <Link to={'/fattura/' + r.id} className="flex-1">
+                <p className="font-medium">{r.invoice_type === 'nota_credito' ? 'NC ' : ''}{r.invoice_number} · {r.clients?.name || ''}</p>
               </Link>
-              <span className={`text-xs px-2 py-1 rounded-full ${statoClass(r.sdi_status || 'bozza')}`}>{STATI[r.sdi_status] || 'Bozza'}</span>
-              <button type="button" onClick={() => setPaid(r.id, !r.paid)} className={`text-xs px-3 py-1 rounded-full ${r.paid ? 'bg-green-600 text-white' : 'bg-slate-100'}`}>
-                {r.paid ? 'Pagata' : 'Segna pagata'}
-              </button>
+              <span className={'text-xs px-2 py-1 rounded-full ' + statoClass(r.sdi_status || 'bozza')}>{STATI[r.sdi_status] || 'Bozza'}</span>
+              <button type="button" onClick={() => setPaid(r.id, !r.paid)} className={'text-xs px-3 py-1 rounded-full ' + (r.paid ? 'bg-green-600 text-white' : 'bg-slate-100')}>{r.paid ? 'Pagata' : 'Segna pagata'}</button>
             </div>
           ))}
         </div>
       ) : (
         <div className="bg-white rounded-xl shadow divide-y">
-          <div className="p-3 text-sm">
-            <Link to="/fornitori" className="text-blue-600">Apri fornitori / nuovo fornitore</Link>
-          </div>
+          <Link to="/fornitori" className="block p-3 text-blue-600 text-sm">Apri fornitori</Link>
           {filteredRicevute.length === 0 ? <p className="p-6 text-slate-500">Nessuna fattura ricevuta</p> : null}
           {filteredRicevute.map(r => (
             <div key={r.id} className="px-4 py-3 flex flex-wrap items-center gap-3">
               <Link to={'/ricevuta/' + r.id} className="flex-1">
-                <p className="font-medium">{r.suppliers?.name} · {r.invoice_number || 'Senza numero'}</p>
-                <p className="text-sm text-slate-500">{r.invoice_date || ''} {r.amount ? '· € ' + Number(r.amount).toFixed(2) : ''}</p>
+                <p className="font-medium">{r.suppliers?.name} · {r.invoice_number || ''}</p>
               </Link>
-              {r.pdf_url ? <a href={r.pdf_url} target="_blank" rel="noreferrer" className="text-blue-600 text-sm">PDF</a> : null}
-              <button type="button" onClick={() => setPaidRicevuta(r.id, !r.paid)} className={`text-xs px-3 py-1 rounded-full ${r.paid ? 'bg-green-600 text-white' : 'bg-slate-100'}`}>
-                {r.paid ? 'Pagata' : 'Segna pagata'}
-              </button>
+              <button type="button" onClick={() => setPaidRicevuta(r.id, !r.paid)} className={'text-xs px-3 py-1 rounded-full ' + (r.paid ? 'bg-green-600 text-white' : 'bg-slate-100')}>{r.paid ? 'Pagata' : 'Segna pagata'}</button>
             </div>
           ))}
         </div>
