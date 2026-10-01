@@ -1,9 +1,9 @@
+import Home from './pages/Home'
 import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
 import Login from './pages/Login'
 import Layout from './components/Layout'
-import Home from './pages/Home'
 import Lista from './pages/Lista'
 import Editor from './pages/Editor'
 import Stampa from './pages/Stampa'
@@ -45,6 +45,7 @@ export default function App() {
           <Route path="/sdi" element={<Sdi />} />
           <Route path="/cliente/:id" element={<DaCliente />} />
           <Route path="*" element={<Navigate to="/" replace />} />
+<Route path="/" element={<Home />} />
         </Route>
       </Routes>
     </BrowserRouter>
