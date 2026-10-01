@@ -114,9 +114,11 @@ export default function Lista() {
     return { anno, trim, ricevuteAnno: totR(ricAnno), ricevuteTrim: totR(ricTrim) }
   }, [rows, ricevute, itemsAll, year, qNow])
 
-  const filteredClients = clients.filter(c =>
-    (c as any).kind !== 'fornitore' && c.name.toLowerCase().includes(searchClient.toLowerCase())
-  )
+  const filteredClients = searchClient.trim().length < 2
+    ? []
+    : clients.filter(c =>
+      (c as any).kind !== 'fornitore' && c.name.toLowerCase().includes(searchClient.toLowerCase())
+    )
   const selected = clients.find(c => c.id === clientId)
 
   const filteredRows = rows.filter(r => {
@@ -183,12 +185,17 @@ export default function Lista() {
       {tab === 'emesse' ? (
         <div className="bg-white rounded-xl shadow p-4 space-y-3">
           <h2 className="font-semibold">Scegli il cliente</h2>
-          <input value={searchClient} onChange={e => setSearchClient(e.target.value)} placeholder="Cerca cliente..." className="w-full border rounded-lg px-3 py-2" />
-          <div className="max-h-32 overflow-auto border rounded-lg">
-            {filteredClients.map(c => (
-              <button key={c.id} type="button" onClick={() => setClientId(c.id)} className={'block w-full text-left px-3 py-2 text-sm ' + (clientId === c.id ? 'bg-blue-50 font-medium' : '')}>{c.name}</button>
-            ))}
-          </div>
+          <input value={searchClient} onChange={e => setSearchClient(e.target.value)} placeholder="Scrivi almeno 2 lettere..." className="w-full border rounded-lg px-3 py-2" />
+          {searchClient.trim().length >= 2 ? (
+            <div className="max-h-32 overflow-auto border rounded-lg">
+              {filteredClients.length === 0 ? <p className="px-3 py-2 text-sm text-slate-500">Nessun cliente</p> : null}
+              {filteredClients.map(c => (
+                <button key={c.id} type="button" onClick={() => setClientId(c.id)} className={'block w-full text-left px-3 py-2 text-sm ' + (clientId === c.id ? 'bg-blue-50 font-medium' : '')}>{c.name}</button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">Nessun elenco finche non cerchi</p>
+          )}
           {selected ? <p className="text-sm text-green-700">Cliente: {selected.name}</p> : null}
           <button type="button" onClick={() => crea('fattura')} className="bg-slate-900 text-white px-4 py-2 rounded-lg">Crea fattura</button>
           <button type="button" onClick={() => crea('nota_credito')} className="border px-4 py-2 rounded-lg ml-2">Crea nota di credito</button>
