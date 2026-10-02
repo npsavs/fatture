@@ -52,8 +52,30 @@ export default function Editor() {
   const [sdiStatus, setSdiStatus] = useState('bozza')
   const [paid, setPaid] = useState(false)
   const [ivaTutte, setIvaTutte] = useState('22')
+  const [dirty, setDirty] = useState(false)
 
   useEffect(() => { start() }, [])
+
+  useEffect(() => {
+    function onLeave(e: BeforeUnloadEvent) {
+      if (!dirty) return
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    function onClick(e: MouseEvent) {
+      if (!dirty) return
+      const a = (e.target as HTMLElement).closest('a')
+      if (!a) return
+      if (!confirm('Modifiche non salvate. Uscire senza salvare?')) e.preventDefault()
+      else setDirty(false)
+    }
+    window.addEventListener('beforeunload', onLeave)
+    document.addEventListener('click', onClick, true)
+    return () => {
+      window.removeEventListener('beforeunload', onLeave)
+      document.removeEventListener('click', onClick, true)
+    }
+  }, [dirty])
 
   async function start() {
     const { data: cl } = await supabase.from('clients').select('*').order('name')
@@ -95,9 +117,10 @@ export default function Editor() {
 
   async function save() {
     if (!invoiceId) return
+    if (!clientId) return alert('Seleziona il destinatario prima di salvare')
     const taxable = items.reduce((s, i) => s + Number(i.quantity) * Number(i.unit_price), 0)
     const { error } = await supabase.from('invoices').update({
-      client_id: clientId || null,
+      client_id: clientId,
       oggetto,
       notes,
       invoice_number: number,
@@ -109,6 +132,7 @@ export default function Editor() {
     if (error) alert(error.message)
     else {
       setSdiStatus('da_inviare')
+      setDirty(false)
       alert('Salvato')
     }
   }
@@ -117,6 +141,7 @@ export default function Editor() {
     const ok = confirm('Cambiare il destinatario in ' + c.name + '?')
     if (!ok) return
     setClientId(c.id)
+    setDirty(true)
     if (invoiceId) await supabase.from('invoices').update({ client_id: c.id }).eq('id', invoiceId)
     setCambia(false)
     setCercaDest('')
@@ -126,6 +151,7 @@ export default function Editor() {
     if (!invoiceId) return
     const ok = confirm('Eliminare la fattura ' + number + '? Non si puo annullare.')
     if (!ok) return
+    setDirty(false)
     await supabase.from('invoice_items').delete().eq('invoice_id', invoiceId)
     const { error } = await supabase.from('invoices').delete().eq('id', invoiceId)
     if (error) return alert(error.message)
@@ -134,6 +160,7 @@ export default function Editor() {
 
   async function togglePaid() {
     if (!invoiceId) return
+    if (!clientId) return alert('Seleziona il destinatario prima di salvare')
     const next = !paid
     await supabase.from('invoices').update({ paid: next }).eq('id', invoiceId)
     setPaid(next)
@@ -163,6 +190,7 @@ export default function Editor() {
     }).select().single()
     if (data) setItems(prev => [...prev, data])
     setSearchProd('')
+    setDirty(true)
   }
 
   async function addRiga() {
@@ -176,9 +204,11 @@ export default function Editor() {
       vat_note: null,
     }).select().single()
     if (data) setItems(prev => [...prev, data])
+    setDirty(true)
   }
 
   async function updateItem(itemId: string, patch: Partial<InvoiceItem>) {
+    setDirty(true)
     await supabase.from('invoice_items').update(patch).eq('id', itemId)
     setItems(prev => prev.map(i => i.id === itemId ? { ...i, ...patch } : i))
   }
@@ -204,12 +234,14 @@ export default function Editor() {
   }
 
   async function removeItem(itemId: string) {
+    setDirty(true)
     await supabase.from('invoice_items').delete().eq('id', itemId)
     setItems(prev => prev.filter(i => i.id !== itemId))
   }
 
   async function marcaEmail() {
     if (!invoiceId) return
+    if (!clientId) return alert('Manca il destinatario')
     const client = clients.find(c => c.id === clientId)
     const to = client?.pec || client?.email
     if (to) {
@@ -223,7 +255,7 @@ export default function Editor() {
   }
 
   const selected = clients.find(c => c.id === clientId)
-  const destFiltrati = clients.filter(c => c.name.toLowerCase().includes(cercaDest.toLowerCase()))
+  const destFiltrati = cercaDest.trim().length < 2 ? [] : clients.filter(c => c.name.toLowerCase().includes(cercaDest.toLowerCase()))
   const found = searchProd.trim().length >= 2
     ? materials.filter(m => m.name.toLowerCase().includes(searchProd.toLowerCase())).slice(0, 8)
     : []
@@ -245,15 +277,14 @@ export default function Editor() {
             <p>SDI: {selected.codice_sdi || '-'}</p>
           </div>
         ) : (
-          <p className="text-red-700 text-sm">Nessun destinatario</p>
+          <p className="text-red-700 text-sm">Nessun destinatario. Senza cliente non si puo salvare.</p>
         )}
         <button type="button" onClick={() => setCambia(!cambia)} className="border px-4 py-2 rounded-lg text-sm">
           {cambia ? 'Annulla cambio' : 'Cambia destinatario'}
         </button>
         {cambia ? (
           <div className="border rounded-lg p-3 space-y-2">
-            <p className="text-sm text-amber-800">Cerca e clicca il nuovo cliente. Chiede conferma prima di cambiare.</p>
-            <input value={cercaDest} onChange={e => setCercaDest(e.target.value)} placeholder="Cerca nuovo destinatario..." className="w-full border rounded-lg px-3 py-2" />
+            <input value={cercaDest} onChange={e => setCercaDest(e.target.value)} placeholder="Scrivi almeno 2 lettere..." className="w-full border rounded-lg px-3 py-2" />
             <div className="max-h-40 overflow-auto">
               {destFiltrati.map(c => (
                 <button key={c.id} type="button" onClick={() => scegliDestinatario(c)} className="block w-full text-left px-3 py-2 text-sm hover:bg-amber-50">
@@ -263,8 +294,8 @@ export default function Editor() {
             </div>
           </div>
         ) : null}
-        <input value={oggetto} onChange={e => setOggetto(e.target.value)} placeholder="Oggetto" className="w-full border rounded-lg px-3 py-2" />
-        <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Note" className="w-full border rounded-lg px-3 py-2" rows={3} />
+        <input value={oggetto} onChange={e => { setOggetto(e.target.value); setDirty(true) }} placeholder="Oggetto" className="w-full border rounded-lg px-3 py-2" />
+        <textarea value={notes} onChange={e => { setNotes(e.target.value); setDirty(true) }} placeholder="Note" className="w-full border rounded-lg px-3 py-2" rows={3} />
       </div>
 
       <div className="bg-white rounded-xl shadow p-4 space-y-3">
