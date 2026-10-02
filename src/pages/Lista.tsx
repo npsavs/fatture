@@ -72,6 +72,19 @@ export default function Lista() {
     load()
   }
 
+  async function eliminaEmessa(id: string) {
+    if (!confirm('Eliminare questa fattura?')) return
+    await supabase.from('invoice_items').delete().eq('invoice_id', id)
+    await supabase.from('invoices').delete().eq('id', id)
+    load()
+  }
+
+  async function eliminaRicevuta(id: string) {
+    if (!confirm('Eliminare questa fattura ricevuta?')) return
+    await supabase.from('supplier_invoices').delete().eq('id', id)
+    load()
+  }
+
   function crea(tipo: string) {
     if (!clientId) return alert('Seleziona o crea prima il cliente')
     navigate('/nuovo?cliente=' + clientId + '&tipo=' + tipo)
@@ -116,9 +129,7 @@ export default function Lista() {
 
   const filteredClients = searchClient.trim().length < 2
     ? []
-    : clients.filter(c =>
-      (c as any).kind !== 'fornitore' && c.name.toLowerCase().includes(searchClient.toLowerCase())
-    )
+    : clients.filter(c => (c as any).kind !== 'fornitore' && c.name.toLowerCase().includes(searchClient.toLowerCase()))
   const selected = clients.find(c => c.id === clientId)
 
   const filteredRows = rows.filter(r => {
@@ -138,7 +149,8 @@ export default function Lista() {
   const filteredRicevute = ricevute.filter(r => {
     const t = q.toLowerCase()
     if (t && !(String(r.invoice_number || '').toLowerCase().includes(t) || String(r.suppliers?.name || '').toLowerCase().includes(t))) return false
-    if (filtroAnno && annoDi(r) !== filtroAnno) return false
+    const anno = annoDi(r)
+    if (filtroAnno && anno && anno !== filtroAnno) return false
     if (filtro === 'pagate') return !!r.paid
     if (filtro === 'non_pagate') return !r.paid
     return true
@@ -212,6 +224,7 @@ export default function Lista() {
               </Link>
               <span className={'text-xs px-2 py-1 rounded-full ' + statoClass(r.sdi_status || 'bozza')}>{STATI[r.sdi_status] || 'Bozza'}</span>
               <button type="button" onClick={() => setPaid(r.id, !r.paid)} className={'text-xs px-3 py-1 rounded-full ' + (r.paid ? 'bg-green-600 text-white' : 'bg-slate-100')}>{r.paid ? 'Pagata' : 'Segna pagata'}</button>
+              <button type="button" onClick={() => eliminaEmessa(r.id)} className="text-xs text-red-600">Elimina</button>
             </div>
           ))}
         </div>
@@ -225,10 +238,4 @@ export default function Lista() {
                 <p className="font-medium">{r.suppliers?.name} · {r.invoice_number || ''}</p>
               </Link>
               <button type="button" onClick={() => setPaidRicevuta(r.id, !r.paid)} className={'text-xs px-3 py-1 rounded-full ' + (r.paid ? 'bg-green-600 text-white' : 'bg-slate-100')}>{r.paid ? 'Pagata' : 'Segna pagata'}</button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
+              <button type="button" onClick={() => eliminaRicevuta(r.id)} className="text-xs text-red-600">Elimina</button>
