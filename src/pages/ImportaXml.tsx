@@ -30,6 +30,51 @@ export default function ImportaXml() {
     setLog(prev => [r, ...prev])
   }
 
+  async function trovaOCreaCliente(nomeAnag: string, pivaAnag: string) {
+    if (pivaAnag) {
+      const byPiva = await supabase.from('clients').select('id').eq('cf_piva', pivaAnag).limit(1)
+      if (byPiva.data && byPiva.data[0]) return byPiva.data[0].id
+    }
+    const byNome = await supabase.from('clients').select('id').ilike('name', nomeAnag).limit(1)
+    if (byNome.data && byNome.data[0]) return byNome.data[0].id
+    const ins = await supabase.from('clients').insert({
+      name: nomeAnag,
+      cf_piva: pivaAnag || null,
+      kind: 'cliente',
+    }).select().single()
+    if (ins.error || !ins.data) return ''
+    return ins.data.id
+  }
+
+  async function trovaOCreaFornitore(nomeAnag: string, pivaAnag: string) {
+    let supplierId = ''
+    if (pivaAnag) {
+      const byPiva = await supabase.from('suppliers').select('id').eq('cf_piva', pivaAnag).limit(1)
+      if (byPiva.data && byPiva.data[0]) supplierId = byPiva.data[0].id
+    }
+    if (!supplierId) {
+      const byNome = await supabase.from('suppliers').select('id').ilike('name', nomeAnag).limit(1)
+      if (byNome.data && byNome.data[0]) supplierId = byNome.data[0].id
+    }
+    if (!supplierId) {
+      const ins = await supabase.from('suppliers').insert({
+        name: nomeAnag,
+        cf_piva: pivaAnag || null,
+      }).select().single()
+      if (ins.error || !ins.data) return ''
+      supplierId = ins.data.id
+    }
+    const gia = await supabase.from('clients').select('id').eq('kind', 'fornitore').ilike('name', nomeAnag).limit(1)
+    if (!gia.data || !gia.data[0]) {
+      await supabase.from('clients').insert({
+        name: nomeAnag,
+        cf_piva: pivaAnag || null,
+        kind: 'fornitore',
+      })
+    }
+    return supplierId
+  }
+
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files
     if (!files || files.length === 0) return
@@ -59,22 +104,12 @@ export default function ImportaXml() {
 
       if (ioMittente) {
         const altro = nome(cessionario)
-        const ok = confirm(file.name + ': sei il mittente. Salvare il cliente ' + altro + ' e la fattura ' + numero + '?')
+        const ok = confirm(file.name + ': sei il mittente. Collegare il cliente ' + altro + ' e salvare la fattura ' + numero + '?')
         if (!ok) continue
-        let clientId = ''
-        const trovati = await supabase.from('clients').select('id, name').ilike('name', altro)
-        if (trovati.data && trovati.data[0]) clientId = trovati.data[0].id
-        else {
-          const ins = await supabase.from('clients').insert({
-            name: altro,
-            cf_piva: pivaDest || null,
-            kind: 'cliente',
-          }).select().single()
-          if (ins.error || !ins.data) {
-            add(file.name + ': ' + (ins.error?.message || 'errore cliente'))
-            continue
-          }
-          clientId = ins.data.id
+        const clientId = await trovaOCreaCliente(altro, pivaDest)
+        if (!clientId) {
+          add(file.name + ': errore cliente')
+          continue
         }
         const inv = await supabase.from('invoices').insert({
           invoice_number: numero,
@@ -101,27 +136,13 @@ export default function ImportaXml() {
         add('Cliente: ' + altro + ' · fattura ' + numero)
       } else if (ioDest) {
         const altro = nome(cedente)
-        const ok = confirm(file.name + ': sei il destinatario. Salvare il fornitore ' + altro + ' e la fattura ' + numero + '?')
+        const ok = confirm(file.name + ': sei il destinatario. Collegare il fornitore ' + altro + ' e salvare la fattura ' + numero + '?')
         if (!ok) continue
-        let supplierId = ''
-        const trovati = await supabase.from('suppliers').select('id, name').ilike('name', altro)
-        if (trovati.data && trovati.data[0]) supplierId = trovati.data[0].id
-        else {
-          const ins = await supabase.from('suppliers').insert({
-            name: altro,
-            cf_piva: pivaMittente || null,
-          }).select().single()
-          if (ins.error || !ins.data) {
-            add(file.name + ': ' + (ins.error?.message || 'errore fornitore'))
-            continue
-          }
-          supplierId = ins.data.id
+        const supplierId = await trovaOCreaFornitore(altro, pivaMittente)
+        if (!supplierId) {
+          add(file.name + ': errore fornitore')
+          continue
         }
-        await supabase.from('clients').insert({
-          name: altro,
-          cf_piva: pivaMittente || null,
-          kind: 'fornitore',
-        })
         const ric = await supabase.from('supplier_invoices').insert({
           supplier_id: supplierId,
           invoice_number: numero,
@@ -142,7 +163,7 @@ export default function ImportaXml() {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Importa XML</h1>
-      <p className="text-sm text-slate-600">Se sei il mittente salva il cliente. Se sei il destinatario salva il fornitore. Puoi scegliere piu file. Poi lancia lo sync per i PDF.</p>
+      <p className="text-sm text-slate-600">Se sei il mittente collega il cliente. Se sei il destinatario collega il fornitore. Se esiste gia, non lo duplica. Puoi scegliere piu file.</p>
       <input value={miaPiva} onChange={e => setMiaPiva(e.target.value)} placeholder="La tua partita IVA" className="w-full border rounded-lg px-3 py-2" />
       <input type="file" accept=".xml,text/xml" multiple onChange={onFile} />
       <div className="bg-white rounded-xl shadow divide-y">
