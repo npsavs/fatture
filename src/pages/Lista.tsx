@@ -239,3 +239,10 @@ export default function Lista() {
               </Link>
               <button type="button" onClick={() => setPaidRicevuta(r.id, !r.paid)} className={'text-xs px-3 py-1 rounded-full ' + (r.paid ? 'bg-green-600 text-white' : 'bg-slate-100')}>{r.paid ? 'Pagata' : 'Segna pagata'}</button>
               <button type="button" onClick={() => eliminaRicevuta(r.id)} className="text-xs text-red-600">Elimina</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
