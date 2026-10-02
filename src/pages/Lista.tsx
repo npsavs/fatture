@@ -21,10 +21,6 @@ function statoClass(s: string) {
   return 'bg-slate-100 text-slate-700'
 }
 
-function trimestre(d: Date) {
-  return Math.floor(d.getMonth() / 3) + 1
-}
-
 function annoDi(r: any) {
   return String(r.invoice_date || r.created_at || '').slice(0, 4)
 }
@@ -95,43 +91,6 @@ export default function Lista() {
     navigate(t === 'ricevute' ? '/ricevute' : '/emesse')
   }
 
-  const now = new Date()
-  const year = now.getFullYear()
-  const qNow = trimestre(now)
-
-    const stats = useMemo(() => {
-    const idSet = new Set(filteredRows.filter(r => (r.invoice_type || 'fattura') !== 'nota_credito').map(r => r.id))
-    let imponibile = 0
-    let iva = 0
-    for (const i of itemsAll) {
-      if (!idSet.has(i.invoice_id)) continue
-      const imp = Number(i.quantity) * Number(i.unit_price)
-      imponibile += imp
-      iva += imp * (Number(i.vat_rate || 0) / 100)
-    }
-    const fornitori = filteredRicevute.reduce((s, r) => s + Number(r.amount || 0), 0)
-    return { imponibile, iva, totale: imponibile + iva, fornitori, nEmesse: filteredRows.length, nRicevute: filteredRicevute.length }
-  }, [filteredRows, filteredRicevute, itemsAll])
-    const ids = (list: any[]) => new Set(list.filter(isFattura).map(r => r.id))
-    const somma = (idSet: Set<string>) => {
-      let imponibile = 0
-      let iva = 0
-      for (const i of itemsAll) {
-        if (!idSet.has(i.invoice_id)) continue
-        const imp = Number(i.quantity) * Number(i.unit_price)
-        imponibile += imp
-        iva += imp * (Number(i.vat_rate || 0) / 100)
-      }
-      return { imponibile, iva, totale: imponibile + iva }
-    }
-    const anno = somma(ids(rows.filter(r => inPeriodo(r, year))))
-    const trim = somma(ids(rows.filter(r => inPeriodo(r, year, qNow))))
-    const ricAnno = ricevute.filter(r => new Date(r.invoice_date || r.created_at).getFullYear() === year)
-    const ricTrim = ricAnno.filter(r => trimestre(new Date(r.invoice_date || r.created_at)) === qNow)
-    const totR = (list: any[]) => list.reduce((s, r) => s + Number(r.amount || 0), 0)
-    return { anno, trim, ricevuteAnno: totR(ricAnno), ricevuteTrim: totR(ricTrim) }
-  }, [rows, ricevute, itemsAll, year, qNow])
-
   const filteredClients = searchClient.trim().length < 2
     ? []
     : clients.filter(c => (c as any).kind !== 'fornitore' && c.name.toLowerCase().includes(searchClient.toLowerCase()))
@@ -161,6 +120,20 @@ export default function Lista() {
     return true
   })
 
+  const stats = useMemo(() => {
+    const idSet = new Set(filteredRows.filter(r => (r.invoice_type || 'fattura') !== 'nota_credito').map(r => r.id))
+    let imponibile = 0
+    let iva = 0
+    for (const i of itemsAll) {
+      if (!idSet.has(i.invoice_id)) continue
+      const imp = Number(i.quantity) * Number(i.unit_price)
+      imponibile += imp
+      iva += imp * (Number(i.vat_rate || 0) / 100)
+    }
+    const fornitori = filteredRicevute.reduce((s, r) => s + Number(r.amount || 0), 0)
+    return { imponibile, iva, totale: imponibile + iva, fornitori, nEmesse: filteredRows.length, nRicevute: filteredRicevute.length }
+  }, [filteredRows, filteredRicevute, itemsAll])
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">{tab === 'ricevute' ? 'Fatture ricevute' : 'Fatture emesse'}</h1>
@@ -183,20 +156,13 @@ export default function Lista() {
       </div>
       <div className="grid md:grid-cols-2 gap-3">
         <div className="bg-white rounded-xl shadow p-4">
-          <p className="text-xs text-slate-500">Fatturato {year}</p>
-          <p className="text-xl font-bold">EUR {stats.anno.totale.toFixed(2)}</p>
+          <p className="text-xs text-slate-500">Fatturato filtro · {stats.nEmesse} fatture</p>
+          <p className="text-xl font-bold">EUR {stats.totale.toFixed(2)}</p>
+          <p className="text-sm text-slate-500">Imponibile {stats.imponibile.toFixed(2)} · IVA {stats.iva.toFixed(2)}</p>
         </div>
         <div className="bg-white rounded-xl shadow p-4">
-          <p className="text-xs text-slate-500">Fatturato T{qNow} {year}</p>
-          <p className="text-xl font-bold">EUR {stats.trim.totale.toFixed(2)}</p>
-        </div>
-        <div className="bg-white rounded-xl shadow p-4">
-          <p className="text-xs text-slate-500">Fornitori {year}</p>
-          <p className="text-xl font-bold">EUR {stats.ricevuteAnno.toFixed(2)}</p>
-        </div>
-        <div className="bg-white rounded-xl shadow p-4">
-          <p className="text-xs text-slate-500">Fornitori T{qNow}</p>
-          <p className="text-xl font-bold">EUR {stats.ricevuteTrim.toFixed(2)}</p>
+          <p className="text-xs text-slate-500">Fornitori filtro · {stats.nRicevute} fatture</p>
+          <p className="text-xl font-bold">EUR {stats.fornitori.toFixed(2)}</p>
         </div>
       </div>
       {tab === 'emesse' ? (
