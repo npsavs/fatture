@@ -121,18 +121,30 @@ export default function Lista() {
   })
 
   const stats = useMemo(() => {
-    const idSet = new Set(filteredRows.filter(r => (r.invoice_type || 'fattura') !== 'nota_credito').map(r => r.id))
-    let imponibile = 0
-    let iva = 0
-    for (const i of itemsAll) {
-      if (!idSet.has(i.invoice_id)) continue
-      const imp = Number(i.quantity) * Number(i.unit_price)
-      imponibile += imp
-      iva += imp * (Number(i.vat_rate || 0) / 100)
+    function conto(lista: any[]) {
+      const idSet = new Set(lista.filter(r => (r.invoice_type || 'fattura') !== 'nota_credito').map(r => r.id))
+      let imponibile = 0
+      let iva = 0
+      for (const i of itemsAll) {
+        if (!idSet.has(i.invoice_id)) continue
+        const imp = Number(i.quantity) * Number(i.unit_price)
+        imponibile += imp
+        iva += imp * (Number(i.vat_rate || 0) / 100)
+      }
+      return { imponibile, iva, totale: imponibile + iva }
     }
-    const fornitori = filteredRicevute.reduce((s, r) => s + Number(r.amount || 0), 0)
-    return { imponibile, iva, totale: imponibile + iva, fornitori, nEmesse: filteredRows.length, nRicevute: filteredRicevute.length }
-  }, [filteredRows, filteredRicevute, itemsAll])
+    const annoCorrente = String(new Date().getFullYear())
+    const emesseCorrente = rows.filter(r => annoDi(r) === annoCorrente)
+    const ricevuteCorrente = ricevute.filter(r => annoDi(r) === annoCorrente)
+    const emesseFiltro = filtroAnno ? rows.filter(r => annoDi(r) === filtroAnno) : rows
+    const ricevuteFiltro = filtroAnno ? ricevute.filter(r => !annoDi(r) || annoDi(r) === filtroAnno) : ricevute
+    return {
+      corrente: conto(emesseCorrente),
+      filtro: conto(emesseFiltro),
+      fornitoriCorrente: ricevuteCorrente.reduce((s, r) => s + Number(r.amount || 0), 0),
+      fornitoriFiltro: ricevuteFiltro.reduce((s, r) => s + Number(r.amount || 0), 0),
+    }
+  }, [rows, ricevute, itemsAll, filtroAnno])
 
   return (
     <div className="space-y-6">
@@ -156,13 +168,16 @@ export default function Lista() {
       </div>
       <div className="grid md:grid-cols-2 gap-3">
         <div className="bg-white rounded-xl shadow p-4">
-          <p className="text-xs text-slate-500">Fatturato filtro · {stats.nEmesse} fatture</p>
-          <p className="text-xl font-bold">EUR {stats.totale.toFixed(2)}</p>
-          <p className="text-sm text-slate-500">Imponibile {stats.imponibile.toFixed(2)} · IVA {stats.iva.toFixed(2)}</p>
+          <p className="text-xs text-slate-500">Fatturato {new Date().getFullYear()}</p>
+          <p className="text-xl font-bold">EUR {stats.corrente.totale.toFixed(2)}</p>
+          <p className="text-sm text-slate-500">Imponibile {stats.corrente.imponibile.toFixed(2)} · IVA {stats.corrente.iva.toFixed(2)}</p>
+          <p className="text-sm text-slate-500">Fornitori {new Date().getFullYear()} · EUR {stats.fornitoriCorrente.toFixed(2)}</p>
         </div>
         <div className="bg-white rounded-xl shadow p-4">
-          <p className="text-xs text-slate-500">Fornitori filtro · {stats.nRicevute} fatture</p>
-          <p className="text-xl font-bold">EUR {stats.fornitori.toFixed(2)}</p>
+          <p className="text-xs text-slate-500">Fatturato {filtroAnno || 'tutti gli anni'}</p>
+          <p className="text-xl font-bold">EUR {stats.filtro.totale.toFixed(2)}</p>
+          <p className="text-sm text-slate-500">Imponibile {stats.filtro.imponibile.toFixed(2)} · IVA {stats.filtro.iva.toFixed(2)}</p>
+          <p className="text-sm text-slate-500">Fornitori {filtroAnno || 'tutti gli anni'} · EUR {stats.fornitoriFiltro.toFixed(2)}</p>
         </div>
       </div>
       {tab === 'emesse' ? (
