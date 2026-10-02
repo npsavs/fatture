@@ -56,7 +56,32 @@ export default function Editor() {
 
   useEffect(() => { start() }, [])
 
-   async function salvaOElimina() {
+  useEffect(() => {
+    function onLeave(e: BeforeUnloadEvent) {
+      if (!dirty) return
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    async function onClick(e: MouseEvent) {
+      if (!dirty) return
+      const a = (e.target as HTMLElement).closest('a')
+      if (!a) return
+      const href = a.getAttribute('href') || ''
+      if (href.indexOf('/stampa/') >= 0) return
+      e.preventDefault()
+      e.stopPropagation()
+      const ok = await salvaOElimina()
+      if (ok) window.location.href = a.href
+    }
+    window.addEventListener('beforeunload', onLeave)
+    document.addEventListener('click', onClick, true)
+    return () => {
+      window.removeEventListener('beforeunload', onLeave)
+      document.removeEventListener('click', onClick, true)
+    }
+  }, [dirty, clientId, invoiceId, oggetto, notes, number, tipo, paid, items])
+
+  async function salvaOElimina() {
     if (!clientId) {
       const elimina = confirm('Senza destinatario non si puo salvare. Eliminare la fattura?')
       if (!elimina) return false
@@ -97,45 +122,6 @@ export default function Editor() {
     return true
   }
 
-  useEffect(() => {
-    function onLeave(e: BeforeUnloadEvent) {
-      if (!dirty) return
-      e.preventDefault()
-      e.returnValue = ''
-    }
-    async function onClick(e: MouseEvent) {
-      if (!dirty) return
-      const a = (e.target as HTMLElement).closest('a')
-      if (!a) return
-      if (a.getAttribute('href')?.startsWith('/stampa/')) return
-      e.preventDefault()
-      e.stopPropagation()
-      const ok = await salvaOElimina()
-      if (ok) window.location.href = a.href
-    }
-    window.addEventListener('beforeunload', onLeave)
-    document.addEventListener('click', onClick, true)
-    return () => {
-      window.removeEventListener('beforeunload', onLeave)
-      document.removeEventListener('click', onClick, true)
-    }
-  }, [dirty, clientId, invoiceId, oggetto, notes, number, tipo, paid, items])
-    }
-    function onClick(e: MouseEvent) {
-      if (!dirty) return
-      const a = (e.target as HTMLElement).closest('a')
-      if (!a) return
-      if (!confirm('Modifiche non salvate. Uscire senza salvare?')) e.preventDefault()
-      else setDirty(false)
-    }
-    window.addEventListener('beforeunload', onLeave)
-    document.addEventListener('click', onClick, true)
-    return () => {
-      window.removeEventListener('beforeunload', onLeave)
-      document.removeEventListener('click', onClick, true)
-    }
-  }, [dirty])
-
   async function start() {
     const { data: cl } = await supabase.from('clients').select('*').order('name')
     const { data: mat } = await supabase.from('materials').select('*').order('name')
@@ -156,6 +142,7 @@ export default function Editor() {
       }
       const { data: it } = await supabase.from('invoice_items').select('*').eq('invoice_id', id)
       setItems(it || [])
+      setDirty(true)
     } else {
       const num = await prossimoNumero(tipoFromUrl)
       const { data: inv } = await supabase.from('invoices').insert({
@@ -169,6 +156,7 @@ export default function Editor() {
         setNumber(num)
         setTipo(tipoFromUrl)
         if (clienteFromUrl) setClientId(clienteFromUrl)
+        setDirty(true)
         navigate('/fattura/' + inv.id, { replace: true })
       }
     }
