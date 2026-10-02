@@ -56,11 +56,70 @@ export default function Editor() {
 
   useEffect(() => { start() }, [])
 
+   async function salvaOElimina() {
+    if (!clientId) {
+      const elimina = confirm('Senza destinatario non si puo salvare. Eliminare la fattura?')
+      if (!elimina) return false
+      if (invoiceId) {
+        await supabase.from('invoice_items').delete().eq('invoice_id', invoiceId)
+        await supabase.from('invoices').delete().eq('id', invoiceId)
+      }
+      setDirty(false)
+      return true
+    }
+    const salva = confirm('Salvare la fattura prima di uscire?\nOK = salva\nAnnulla = elimina')
+    if (salva) {
+      const taxable = items.reduce((s, i) => s + Number(i.quantity) * Number(i.unit_price), 0)
+      const { error } = await supabase.from('invoices').update({
+        client_id: clientId,
+        oggetto,
+        notes,
+        invoice_number: number,
+        taxable,
+        invoice_type: tipo,
+        sdi_status: 'da_inviare',
+        paid,
+      }).eq('id', invoiceId)
+      if (error) {
+        alert(error.message)
+        return false
+      }
+      setDirty(false)
+      return true
+    }
+    const elimina = confirm('Eliminare questa fattura?')
+    if (!elimina) return false
+    if (invoiceId) {
+      await supabase.from('invoice_items').delete().eq('invoice_id', invoiceId)
+      await supabase.from('invoices').delete().eq('id', invoiceId)
+    }
+    setDirty(false)
+    return true
+  }
+
   useEffect(() => {
     function onLeave(e: BeforeUnloadEvent) {
       if (!dirty) return
       e.preventDefault()
       e.returnValue = ''
+    }
+    async function onClick(e: MouseEvent) {
+      if (!dirty) return
+      const a = (e.target as HTMLElement).closest('a')
+      if (!a) return
+      if (a.getAttribute('href')?.startsWith('/stampa/')) return
+      e.preventDefault()
+      e.stopPropagation()
+      const ok = await salvaOElimina()
+      if (ok) window.location.href = a.href
+    }
+    window.addEventListener('beforeunload', onLeave)
+    document.addEventListener('click', onClick, true)
+    return () => {
+      window.removeEventListener('beforeunload', onLeave)
+      document.removeEventListener('click', onClick, true)
+    }
+  }, [dirty, clientId, invoiceId, oggetto, notes, number, tipo, paid, items])
     }
     function onClick(e: MouseEvent) {
       if (!dirty) return
