@@ -99,14 +99,19 @@ export default function Lista() {
   const year = now.getFullYear()
   const qNow = trimestre(now)
 
-  const stats = useMemo(() => {
-    const isFattura = (r: any) => (r.invoice_type || 'fattura') !== 'nota_credito'
-    const inPeriodo = (r: any, y: number, t?: number) => {
-      const d = new Date(r.invoice_date || r.created_at)
-      if (d.getFullYear() !== y) return false
-      if (t && trimestre(d) !== t) return false
-      return true
+    const stats = useMemo(() => {
+    const idSet = new Set(filteredRows.filter(r => (r.invoice_type || 'fattura') !== 'nota_credito').map(r => r.id))
+    let imponibile = 0
+    let iva = 0
+    for (const i of itemsAll) {
+      if (!idSet.has(i.invoice_id)) continue
+      const imp = Number(i.quantity) * Number(i.unit_price)
+      imponibile += imp
+      iva += imp * (Number(i.vat_rate || 0) / 100)
     }
+    const fornitori = filteredRicevute.reduce((s, r) => s + Number(r.amount || 0), 0)
+    return { imponibile, iva, totale: imponibile + iva, fornitori, nEmesse: filteredRows.length, nRicevute: filteredRicevute.length }
+  }, [filteredRows, filteredRicevute, itemsAll])
     const ids = (list: any[]) => new Set(list.filter(isFattura).map(r => r.id))
     const somma = (idSet: Set<string>) => {
       let imponibile = 0
