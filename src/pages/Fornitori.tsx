@@ -2,9 +2,18 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
+function splitIva(totale: number) {
+  const imponibile = totale / 1.22
+  return { imponibile, iva: totale - imponibile }
+}
+
 export default function Fornitori() {
   const [suppliers, setSuppliers] = useState<any[]>([])
   const [invoices, setInvoices] = useState<any[]>([])
+  const [q, setQ] = useState('')
+  const [supplierId, setSupplierId] = useState('')
+  const [filtroAnno, setFiltroAnno] = useState(String(new Date().getFullYear()))
+  const [filtro, setFiltro] = useState('tutte')
   const [form, setForm] = useState({ name: '', cf_piva: '', phone: '', email: '' })
   const [msg, setMsg] = useState('')
 
@@ -35,11 +44,36 @@ export default function Fornitori() {
       email: form.email.trim() || null,
       kind: 'fornitore',
     })
-    if (insCli.error) setMsg('Fornitore in fatture. Anagrafica: ' + insCli.error.message)
-    else setMsg('Fornitore salvato anche in Anagrafica')
+    if (insCli.error) setMsg('Salvato in fatture. Anagrafica: ' + insCli.error.message)
+    else setMsg('Salvato anche in Anagrafica, pagina Fornitori')
     setForm({ name: '', cf_piva: '', phone: '', email: '' })
     load()
   }
+
+  const trovati = q.trim().length < 2 ? [] : suppliers.filter(s => s.name.toLowerCase().includes(q.toLowerCase()))
+  const scelto = suppliers.find(s => s.id === supplierId)
+  const now = new Date()
+
+  const delFornitore = invoices.filter(i => !supplierId || i.supplier_id === supplierId)
+  const lista = delFornitore.filter(i => {
+    const data = String(i.invoice_date || i.created_at || '')
+    if (filtroAnno && data.slice(0, 4) !== filtroAnno) return false
+    if (filtro === 'pagate' && !i.paid) return false
+    if (filtro === 'non_pagate' && i.paid) return false
+    return true
+  })
+
+  function somma(rows: any[]) {
+    const totale = rows.reduce((s, r) => s + Number(r.amount || 0), 0)
+    return splitIva(totale)
+  }
+  const annoRows = delFornitore.filter(i => String(i.invoice_date || i.created_at || '').slice(0, 4) === String(now.getFullYear()))
+  const meseRows = annoRows.filter(i => {
+    const d = new Date(i.invoice_date || i.created_at)
+    return d.getMonth() === now.getMonth()
+  })
+  const anno = somma(annoRows)
+  const mese = somma(meseRows)
 
   return (
     <div className="space-y-6">
@@ -55,19 +89,46 @@ export default function Fornitori() {
         <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg">Salva fornitore</button>
       </form>
 
-      <div className="bg-white rounded-xl shadow p-4">
-        <h2 className="font-semibold mb-2">Elenco fornitori</h2>
-        {suppliers.map((s: any) => (
-          <p key={s.id} className="text-sm py-1">{s.name} {s.cf_piva || ''}</p>
+      <div className="bg-white rounded-xl shadow p-4 space-y-2">
+        <h2 className="font-semibold">Cerca fornitore</h2>
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="Scrivi almeno 2 lettere..." className="w-full border rounded-lg px-3 py-2" />
+        {q.trim().length < 2 ? <p className="text-sm text-slate-500">Nessun elenco finche non cerchi</p> : null}
+        {trovati.map((s: any) => (
+          <button key={s.id} type="button" onClick={() => { setSupplierId(s.id); setQ(s.name) }} className={'block w-full text-left px-3 py-2 text-sm rounded ' + (supplierId === s.id ? 'bg-blue-50 font-medium' : '')}>{s.name}</button>
         ))}
+        {scelto ? <button type="button" onClick={() => { setSupplierId(''); setQ('') }} className="text-sm text-slate-500">Tutti i fornitori</button> : null}
+      </div>
+
+      <div className="grid sm:grid-cols-2 gap-3">
+        <div className="bg-white rounded-xl shadow p-4">
+          <p className="text-xs text-slate-500">Mese {now.getMonth() + 1}/{now.getFullYear()} {scelto ? '· ' + scelto.name : ''}</p>
+          <p>Imponibile EUR {mese.imponibile.toFixed(2)}</p>
+          <p>IVA EUR {mese.iva.toFixed(2)}</p>
+        </div>
+        <div className="bg-white rounded-xl shadow p-4">
+          <p className="text-xs text-slate-500">Anno {now.getFullYear()} {scelto ? '· ' + scelto.name : ''}</p>
+          <p>Imponibile EUR {anno.imponibile.toFixed(2)}</p>
+          <p>IVA EUR {anno.iva.toFixed(2)}</p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <select value={filtroAnno} onChange={e => setFiltroAnno(e.target.value)} className="border rounded-lg px-2 py-2 text-sm bg-white">
+          <option value="">Tutti gli anni</option>
+          <option value="2026">2026</option>
+          <option value="2025">2025</option>
+        </select>
+        <button type="button" onClick={() => setFiltro('tutte')} className={'px-3 py-2 rounded-lg text-sm ' + (filtro === 'tutte' ? 'bg-slate-900 text-white' : 'border bg-white')}>Tutte</button>
+        <button type="button" onClick={() => setFiltro('pagate')} className={'px-3 py-2 rounded-lg text-sm ' + (filtro === 'pagate' ? 'bg-green-700 text-white' : 'border bg-white')}>Pagate</button>
+        <button type="button" onClick={() => setFiltro('non_pagate')} className={'px-3 py-2 rounded-lg text-sm ' + (filtro === 'non_pagate' ? 'bg-slate-700 text-white' : 'border bg-white')}>Non pagate</button>
       </div>
 
       <div className="bg-white rounded-xl shadow divide-y">
-        <h2 className="font-semibold p-4">Fatture ricevute (clicca per aprire)</h2>
-        {invoices.length === 0 ? <p className="p-4 text-slate-500 text-sm">Nessuna fattura</p> : null}
-        {invoices.map((i: any) => (
+        <h2 className="font-semibold p-4">Fatture ricevute ({lista.length})</h2>
+        {lista.map((i: any) => (
           <Link key={i.id} to={'/ricevuta/' + i.id} className="block px-4 py-3 hover:bg-slate-50">
-            {(i.suppliers ? i.suppliers.name : '') + ' ' + (i.invoice_number || '')}
+            <p className="font-medium">{(i.suppliers ? i.suppliers.name : '') + ' · ' + (i.invoice_number || '')}</p>
+            <p className="text-sm text-slate-500">{i.invoice_date || ''} · EUR {Number(i.amount || 0).toFixed(2)} · {i.paid ? 'Pagata' : 'Non pagata'}</p>
           </Link>
         ))}
       </div>
