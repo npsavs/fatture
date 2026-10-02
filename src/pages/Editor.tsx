@@ -232,22 +232,8 @@ export default function Editor() {
   const titolo = tipo === 'nota_credito' || String(number).startsWith('NC') ? 'Nota di credito' : 'Fattura'
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center flex-wrap gap-2">
-        <h1 className="text-2xl font-bold">{titolo} {number}</h1>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={save} className="border px-4 py-2 rounded-lg">Salva</button>
-          <button type="button" onClick={togglePaid} className={`px-4 py-2 rounded-lg ${paid ? 'bg-green-600 text-white' : 'border'}`}>
-            {paid ? 'Gia pagata' : 'Segna come pagata'}
-          </button>
-          {invoiceId ? <Link to={'/stampa/' + invoiceId} className="bg-slate-900 text-white px-4 py-2 rounded-lg">Anteprima / Stampa</Link> : null}
-          <button type="button" onClick={marcaEmail} className="bg-sky-700 text-white px-4 py-2 rounded-lg">{emailSent ? 'Email gia inviata' : 'Invia email'}</button>
-          <button type="button" onClick={inviaSdi} className="bg-emerald-700 text-white px-4 py-2 rounded-lg">
-            {sdiStatus === 'inviata_sdi' ? 'Gia inviata SDI' : 'Invia allo SDI'}
-          </button>
-          <button type="button" onClick={eliminaFattura} className="bg-red-100 text-red-700 px-4 py-2 rounded-lg">Elimina fattura</button>
-        </div>
-      </div>
+    <div className="space-y-6 pb-8">
+      <h1 className="text-2xl font-bold">{titolo} {number}</h1>
 
       <div className="bg-white rounded-xl shadow p-4 space-y-3">
         <p className="text-sm text-slate-500">Destinatario</p>
@@ -308,7 +294,11 @@ export default function Editor() {
         {items.map(item => (
           <div key={item.id} className="grid md:grid-cols-6 gap-2 items-center">
             <input value={item.name} onChange={e => updateItem(item.id, { name: e.target.value })} className="border rounded px-2 py-1 md:col-span-2" />
-            <input type="number" value={item.quantity} onChange={e => updateItem(item.id, { quantity: Number(e.target.value) })} className="border rounded px-2 py-1" />
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={() => updateItem(item.id, { quantity: Math.max(1, Number(item.quantity) - 1) })} className="w-8 h-8 border rounded">-</button>
+              <input type="number" value={item.quantity} onChange={e => updateItem(item.id, { quantity: Number(e.target.value) })} className="border rounded px-2 py-1 w-16 text-center" />
+              <button type="button" onClick={() => updateItem(item.id, { quantity: Number(item.quantity) + 1 })} className="w-8 h-8 border rounded">+</button>
+            </div>
             <input type="number" step="0.01" value={item.unit_price} onChange={e => updateItem(item.id, { unit_price: Number(e.target.value) })} className="border rounded px-2 py-1" />
             <select value={trovaIva(item).code} onChange={e => setIva(item.id, e.target.value)} className="border rounded px-2 py-1 text-xs">
               {ALIQUOTE.map(a => <option key={a.code} value={a.code}>{a.label}</option>)}
@@ -319,6 +309,19 @@ export default function Editor() {
         <p className="text-right font-bold">
           Imponibile EUR {tot.toFixed(2)} · IVA EUR {ivaTot.toFixed(2)} · Totale EUR {(tot + ivaTot).toFixed(2)}
         </p>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={save} className="border px-4 py-2 rounded-lg bg-white">Salva</button>
+        <button type="button" onClick={togglePaid} className={'px-4 py-2 rounded-lg ' + (paid ? 'bg-green-600 text-white' : 'border bg-white')}>
+          {paid ? 'Gia pagata' : 'Segna come pagata'}
+        </button>
+        {invoiceId ? <Link to={'/stampa/' + invoiceId} className="bg-slate-900 text-white px-4 py-2 rounded-lg">Anteprima / Stampa</Link> : null}
+        <button type="button" onClick={marcaEmail} className="bg-sky-700 text-white px-4 py-2 rounded-lg">{emailSent ? 'Email gia inviata' : 'Invia email'}</button>
+        <button type="button" onClick={inviaSdi} className="bg-emerald-700 text-white px-4 py-2 rounded-lg">
+          {sdiStatus === 'inviata_sdi' ? 'Gia inviata SDI' : 'Invia allo SDI'}
+        </button>
+        <button type="button" onClick={eliminaFattura} className="bg-red-100 text-red-700 px-4 py-2 rounded-lg">Elimina fattura</button>
       </div>
     </div>
   )
