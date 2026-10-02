@@ -6,7 +6,7 @@ function testo(el: Element | null, tag: string) {
   return n ? (n.textContent || '').trim() : ''
 }
 
-function piva(blocco: Element | null) {
+function pivaBlocco(blocco: Element | null) {
   if (!blocco) return ''
   const id = blocco.getElementsByTagName('IdFiscaleIVA')[0]
   const codice = testo(blocco, 'CodiceFiscale')
@@ -22,6 +22,10 @@ function nome(blocco: Element | null) {
   return (testo(ana || blocco, 'Nome') + ' ' + testo(ana || blocco, 'Cognome')).trim()
 }
 
+function pulisciPiva(v: string) {
+  return String(v || '').toUpperCase().replace(/^IT/, '').replace(/\s/g, '')
+}
+
 export default function ImportaXml() {
   const [miaPiva, setMiaPiva] = useState(localStorage.getItem('nps_piva') || '')
   const [log, setLog] = useState<string[]>([])
@@ -31,15 +35,17 @@ export default function ImportaXml() {
   }
 
   async function trovaOCreaCliente(nomeAnag: string, pivaAnag: string) {
-    if (pivaAnag) {
-      const byPiva = await supabase.from('clients').select('id').eq('cf_piva', pivaAnag).limit(1)
-      if (byPiva.data && byPiva.data[0]) return byPiva.data[0].id
-    }
-    const byNome = await supabase.from('clients').select('id').ilike('name', nomeAnag).limit(1)
-    if (byNome.data && byNome.data[0]) return byNome.data[0].id
+    const p = pulisciPiva(pivaAnag)
+    const tutti = await supabase.from('clients').select('id, name, cf_piva, kind')
+    const lista = tutti.data || []
+    const gia = lista.filter(c =>
+      (p && pulisciPiva(c.cf_piva || '') === p) ||
+      String(c.name || '').trim().toLowerCase() === nomeAnag.trim().toLowerCase()
+    )
+    if (gia.length >= 1) return gia[0].id
     const ins = await supabase.from('clients').insert({
       name: nomeAnag,
-      cf_piva: pivaAnag || null,
+      cf_piva: p || null,
       kind: 'cliente',
     }).select().single()
     if (ins.error || !ins.data) return ''
@@ -47,30 +53,26 @@ export default function ImportaXml() {
   }
 
   async function trovaOCreaFornitore(nomeAnag: string, pivaAnag: string) {
-    let supplierId = ''
-    if (pivaAnag) {
-      const byPiva = await supabase.from('suppliers').select('id').eq('cf_piva', pivaAnag).limit(1)
-      if (byPiva.data && byPiva.data[0]) supplierId = byPiva.data[0].id
-    }
+    const p = pulisciPiva(pivaAnag)
+    const tutti = await supabase.from('suppliers').select('id, name, cf_piva')
+    const lista = tutti.data || []
+    const gia = lista.filter(c =>
+      (p && pulisciPiva(c.cf_piva || '') === p) ||
+      String(c.name || '').trim().toLowerCase() === nomeAnag.trim().toLowerCase()
+    )
+    let supplierId = gia[0] ? gia[0].id : ''
     if (!supplierId) {
-      const byNome = await supabase.from('suppliers').select('id').ilike('name', nomeAnag).limit(1)
-      if (byNome.data && byNome.data[0]) supplierId = byNome.data[0].id
-    }
-    if (!supplierId) {
-      const ins = await supabase.from('suppliers').insert({
-        name: nomeAnag,
-        cf_piva: pivaAnag || null,
-      }).select().single()
+      const ins = await supabase.from('suppliers').insert({ name: nomeAnag, cf_piva: p || null }).select().single()
       if (ins.error || !ins.data) return ''
       supplierId = ins.data.id
     }
-    const gia = await supabase.from('clients').select('id').eq('kind', 'fornitore').ilike('name', nomeAnag).limit(1)
-    if (!gia.data || !gia.data[0]) {
-      await supabase.from('clients').insert({
-        name: nomeAnag,
-        cf_piva: pivaAnag || null,
-        kind: 'fornitore',
-      })
+    const anag = await supabase.from('clients').select('id, name, cf_piva, kind')
+    const giaAnag = (anag.data || []).filter(c =>
+      (p && pulisciPiva(c.cf_piva || '') === p) ||
+      String(c.name || '').trim().toLowerCase() === nomeAnag.trim().toLowerCase()
+    )
+    if (giaAnag.length === 0) {
+      await supabase.from('clients').insert({ name: nomeAnag, cf_piva: p || null, kind: 'fornitore' })
     }
     return supplierId
   }
@@ -78,7 +80,7 @@ export default function ImportaXml() {
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files
     if (!files || files.length === 0) return
-    const mia = miaPiva.replace(/\s/g, '')
+    const mia = pulisciPiva(miaPiva)
     if (mia.length < 11) return alert('Inserisci la tua partita IVA')
     localStorage.setItem('nps_piva', mia)
 
@@ -97,10 +99,10 @@ export default function ImportaXml() {
       const numero = testo(dati || null, 'Numero')
       const data = testo(dati || null, 'Data')
       const totale = Number(testo(dati || null, 'ImportoTotaleDocumento') || 0)
-      const pivaMittente = piva(cedente)
-      const pivaDest = piva(cessionario)
-      const ioMittente = pivaMittente.indexOf(mia) >= 0 || mia.indexOf(pivaMittente) >= 0
-      const ioDest = pivaDest.indexOf(mia) >= 0 || mia.indexOf(pivaDest) >= 0
+      const pivaMittente = pivaBlocco(cedente)
+      const pivaDest = pivaBlocco(cessionario)
+      const ioMittente = pulisciPiva(pivaMittente) === mia
+      const ioDest = pulisciPiva(pivaDest) === mia
 
       if (ioMittente) {
         const altro = nome(cessionario)
@@ -163,7 +165,7 @@ export default function ImportaXml() {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Importa XML</h1>
-      <p className="text-sm text-slate-600">Se sei il mittente collega il cliente. Se sei il destinatario collega il fornitore. Se esiste gia, non lo duplica. Puoi scegliere piu file.</p>
+      <p className="text-sm text-slate-600">Se la partita IVA o il nome esistono gia, non crea una scheda nuova. Puoi scegliere piu file.</p>
       <input value={miaPiva} onChange={e => setMiaPiva(e.target.value)} placeholder="La tua partita IVA" className="w-full border rounded-lg px-3 py-2" />
       <input type="file" accept=".xml,text/xml" multiple onChange={onFile} />
       <div className="bg-white rounded-xl shadow divide-y">
