@@ -11,7 +11,7 @@ import Fornitori from './pages/Fornitori'
 import Ricevuta from './pages/Ricevuta'
 import Clienti from './pages/Clienti'
 import Sdi from './pages/Sdi'
-
+import ImportaXml from './pages/ImportaXml'
 function DaCliente() {
   const { id } = useParams()
   return <Navigate to={'/nuovo?cliente=' + id} replace />
@@ -46,6 +46,7 @@ export default function App() {
           <Route path="/cliente/:id" element={<DaCliente />} />
           <Route path="*" element={<Navigate to="/" replace />} />
 <Route path="/" element={<Home />} />
+<Route path="/importa" element={<ImportaXml />} />
         </Route>
       </Routes>
     </BrowserRouter>
