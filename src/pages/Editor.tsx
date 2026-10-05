@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
@@ -57,17 +58,18 @@ export default function Editor() {
   const [paid, setPaid] = useState(false)
   const [ivaTutte, setIvaTutte] = useState('22')
   const [dirty, setDirty] = useState(false)
+  const [modifica, setModifica] = useState(!id)
 
   useEffect(() => { start() }, [])
 
   useEffect(() => {
     function onLeave(e: BeforeUnloadEvent) {
-      if (!dirty) return
+      if (!modifica || !dirty) return
       e.preventDefault()
       e.returnValue = ''
     }
     async function onClick(e: MouseEvent) {
-      if (!dirty) return
+      if (!modifica || !dirty) return
       const a = (e.target as HTMLElement).closest('a')
       if (!a) return
       const href = a.getAttribute('href') || ''
@@ -83,7 +85,7 @@ export default function Editor() {
       window.removeEventListener('beforeunload', onLeave)
       document.removeEventListener('click', onClick, true)
     }
-  }, [dirty, clientId, invoiceId, oggetto, notes, number, tipo, paid, items])
+  }, [dirty, modifica, clientId, invoiceId, oggetto, notes, number, tipo, paid, items])
 
   async function salvaOElimina() {
     if (!clientId) {
@@ -125,7 +127,7 @@ export default function Editor() {
       const { data: inv } = await supabase.from('invoices').select('*').eq('id', id).single()
       if (inv) {
         setInvoiceId(inv.id)
-        setClientId(inv.client_id || clienteFromUrl || '')
+        setClientId(inv.client_id || '')
         setOggetto(inv.oggetto || '')
         setNotes(inv.notes || '')
         setNumber(inv.invoice_number || '')
@@ -136,7 +138,8 @@ export default function Editor() {
       }
       const { data: it } = await supabase.from('invoice_items').select('*').eq('invoice_id', id)
       setItems(it || [])
-      setDirty(true)
+      setDirty(false)
+      setModifica(false)
     } else {
       const num = await prossimoNumero(tipoFromUrl)
       const { data: inv } = await supabase.from('invoices').insert({
@@ -147,6 +150,7 @@ export default function Editor() {
         setNumber(num)
         setTipo(tipoFromUrl)
         if (clienteFromUrl) setClientId(clienteFromUrl)
+        setModifica(true)
         setDirty(true)
         navigate('/fattura/' + inv.id, { replace: true })
       }
@@ -161,10 +165,11 @@ export default function Editor() {
       client_id: clientId, oggetto, notes, invoice_number: number, taxable, invoice_type: tipo, sdi_status: 'da_inviare', paid,
     }).eq('id', invoiceId)
     if (error) alert(error.message)
-    else { setSdiStatus('da_inviare'); setDirty(false); alert('Salvato') }
+    else { setSdiStatus('da_inviare'); setDirty(false); setModifica(false); alert('Salvato') }
   }
 
   async function scegliDestinatario(c: Client) {
+    if (!modifica) return
     if (!confirm('Cambiare il destinatario in ' + c.name + '?')) return
     setClientId(c.id)
     setDirty(true)
@@ -184,7 +189,7 @@ export default function Editor() {
   }
 
   async function togglePaid() {
-    if (!invoiceId) return
+    if (!invoiceId || !modifica) return
     if (!clientId) return alert('Seleziona il destinatario prima di salvare')
     const next = !paid
     await supabase.from('invoices').update({ paid: next }).eq('id', invoiceId)
@@ -192,7 +197,7 @@ export default function Editor() {
   }
 
   async function inviaSdi() {
-    if (!invoiceId) return
+    if (!invoiceId || !modifica) return
     if (!clientId) return alert('Manca il destinatario')
     const cliente = clients.find(c => c.id === clientId)
     if (!cliente?.codice_sdi && !cliente?.pec) return alert('Mancano codice SDI o PEC')
@@ -203,7 +208,7 @@ export default function Editor() {
   }
 
   async function addMaterial(m: Material) {
-    if (!invoiceId) return
+    if (!invoiceId || !modifica) return
     const { data } = await supabase.from('invoice_items').insert({
       invoice_id: invoiceId, name: m.name, description: m.description, quantity: 1, unit_price: m.unit_price, vat_rate: 22, vat_note: null, discount_percent: 0,
     }).select().single()
@@ -213,7 +218,7 @@ export default function Editor() {
   }
 
   async function addRiga() {
-    if (!invoiceId) return
+    if (!invoiceId || !modifica) return
     const { data } = await supabase.from('invoice_items').insert({
       invoice_id: invoiceId, name: 'Nuova riga', quantity: 1, unit_price: 0, vat_rate: 22, vat_note: null, discount_percent: 0,
     }).select().single()
@@ -222,6 +227,7 @@ export default function Editor() {
   }
 
   async function updateItem(itemId: string, patch: Partial<InvoiceItem>) {
+    if (!modifica) return
     setDirty(true)
     await supabase.from('invoice_items').update(patch).eq('id', itemId)
     setItems(prev => prev.map(i => i.id === itemId ? { ...i, ...patch } : i))
@@ -240,19 +246,21 @@ export default function Editor() {
   }
 
   async function stessaIvaTutte() {
+    if (!modifica) return
     const a = ALIQUOTE.find(x => x.code === ivaTutte)
     if (!a) return
     for (const item of items) await updateItem(item.id, { vat_rate: a.rate, vat_note: a.note || null } as any)
   }
 
   async function removeItem(itemId: string) {
+    if (!modifica) return
     setDirty(true)
     await supabase.from('invoice_items').delete().eq('id', itemId)
     setItems(prev => prev.filter(i => i.id !== itemId))
   }
 
   async function marcaEmail() {
-    if (!invoiceId) return
+    if (!invoiceId || !modifica) return
     if (!clientId) return alert('Manca il destinatario')
     const client = clients.find(c => c.id === clientId)
     const to = client?.pec || client?.email
@@ -270,7 +278,11 @@ export default function Editor() {
 
   return (
     <div className="space-y-6 pb-8">
-      <h1 className="text-2xl font-bold">{titolo} {number}</h1>
+      <div className="flex flex-wrap gap-2 items-center">
+        <h1 className="text-2xl font-bold flex-1">{titolo} {number}</h1>
+        {!modifica ? <button type="button" onClick={() => setModifica(true)} className="border px-4 py-2 rounded-lg bg-white">Modifica</button> : null}
+        {invoiceId ? <Link to={'/stampa/' + invoiceId} className="bg-slate-900 text-white px-4 py-2 rounded-lg">Anteprima / Stampa</Link> : null}
+      </div>
       <div className="bg-white rounded-xl shadow p-4 space-y-3">
         <p className="text-sm text-slate-500">Destinatario</p>
         {selected ? (
@@ -281,8 +293,8 @@ export default function Editor() {
             <p>SDI: {selected.codice_sdi || '-'}</p>
           </div>
         ) : <p className="text-red-700 text-sm">Nessun destinatario. Senza cliente non si puo salvare.</p>}
-        <button type="button" onClick={() => setCambia(!cambia)} className="border px-4 py-2 rounded-lg text-sm">{cambia ? 'Annulla cambio' : 'Cambia destinatario'}</button>
-        {cambia ? (
+        {modifica ? <button type="button" onClick={() => setCambia(!cambia)} className="border px-4 py-2 rounded-lg text-sm">{cambia ? 'Annulla cambio' : 'Cambia destinatario'}</button> : null}
+        {cambia && modifica ? (
           <div className="border rounded-lg p-3 space-y-2">
             <input value={cercaDest} onChange={e => setCercaDest(e.target.value)} placeholder="Scrivi almeno 2 lettere..." className="w-full border rounded-lg px-3 py-2" />
             <div className="max-h-40 overflow-auto">
@@ -292,45 +304,51 @@ export default function Editor() {
             </div>
           </div>
         ) : null}
-        <input value={oggetto} onChange={e => { setOggetto(e.target.value); setDirty(true) }} placeholder="Oggetto" className="w-full border rounded-lg px-3 py-2" />
-        <textarea value={notes} onChange={e => { setNotes(e.target.value); setDirty(true) }} placeholder="Note" className="w-full border rounded-lg px-3 py-2" rows={3} />
+        <input value={oggetto} disabled={!modifica} onChange={e => { setOggetto(e.target.value); setDirty(true) }} placeholder="Oggetto" className="w-full border rounded-lg px-3 py-2" />
+        <textarea value={notes} disabled={!modifica} onChange={e => { setNotes(e.target.value); setDirty(true) }} placeholder="Note" className="w-full border rounded-lg px-3 py-2" rows={3} />
       </div>
-      <div className="bg-white rounded-xl shadow p-4 space-y-3">
-        <h2 className="font-semibold">Aggiungi una riga</h2>
-        <input value={searchProd} onChange={e => setSearchProd(e.target.value)} placeholder="Cerca prodotto (2 lettere)..." className="w-full border rounded-lg px-3 py-2" />
-        {found.length > 0 ? (
-          <div className="border rounded-lg divide-y">
-            {found.map(m => (
-              <button key={m.id} type="button" onClick={() => addMaterial(m)} className="flex justify-between w-full px-3 py-2 text-sm hover:bg-blue-50">
-                <span>{m.name}</span><span>EUR {Number(m.unit_price).toFixed(2)}</span>
-              </button>
-            ))}
-          </div>
-        ) : null}
-        <button type="button" onClick={addRiga} className="border px-4 py-2 rounded-lg text-sm">+ Riga libera</button>
-      </div>
+      {modifica ? (
+        <div className="bg-white rounded-xl shadow p-4 space-y-3">
+          <h2 className="font-semibold">Aggiungi una riga</h2>
+          <input value={searchProd} onChange={e => setSearchProd(e.target.value)} placeholder="Cerca prodotto (2 lettere)..." className="w-full border rounded-lg px-3 py-2" />
+          {found.length > 0 ? (
+            <div className="border rounded-lg divide-y">
+              {found.map(m => (
+                <button key={m.id} type="button" onClick={() => addMaterial(m)} className="flex justify-between w-full px-3 py-2 text-sm hover:bg-blue-50">
+                  <span>{m.name}</span><span>EUR {Number(m.unit_price).toFixed(2)}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <button type="button" onClick={addRiga} className="border px-4 py-2 rounded-lg text-sm">+ Riga libera</button>
+        </div>
+      ) : null}
       <div className="bg-white rounded-xl shadow p-4 space-y-3">
         <div className="flex flex-wrap gap-2 items-center">
           <h2 className="font-semibold">Righe</h2>
-          <select value={ivaTutte} onChange={e => setIvaTutte(e.target.value)} className="border rounded px-2 py-1 text-sm">
-            {ALIQUOTE.map(a => <option key={a.code} value={a.code}>{a.label}</option>)}
-          </select>
-          <button type="button" onClick={stessaIvaTutte} className="border px-3 py-1 rounded-lg text-sm">Applica IVA a tutte le righe</button>
+          {modifica ? (
+            <>
+              <select value={ivaTutte} onChange={e => setIvaTutte(e.target.value)} className="border rounded px-2 py-1 text-sm">
+                {ALIQUOTE.map(a => <option key={a.code} value={a.code}>{a.label}</option>)}
+              </select>
+              <button type="button" onClick={stessaIvaTutte} className="border px-3 py-1 rounded-lg text-sm">Applica IVA a tutte le righe</button>
+            </>
+          ) : null}
         </div>
         {items.map(item => (
           <div key={item.id} className="grid md:grid-cols-7 gap-2 items-center">
-            <input value={item.name} onChange={e => updateItem(item.id, { name: e.target.value })} className="border rounded px-2 py-1 md:col-span-2" />
+            <input value={item.name} disabled={!modifica} onChange={e => updateItem(item.id, { name: e.target.value })} className="border rounded px-2 py-1 md:col-span-2" />
             <div className="flex items-center gap-1">
-              <button type="button" onClick={() => updateItem(item.id, { quantity: Math.max(1, Number(item.quantity) - 1) })} className="w-8 h-8 border rounded">-</button>
-              <input type="number" value={item.quantity} onChange={e => updateItem(item.id, { quantity: Number(e.target.value) })} className="border rounded px-2 py-1 w-16 text-center" />
-              <button type="button" onClick={() => updateItem(item.id, { quantity: Number(item.quantity) + 1 })} className="w-8 h-8 border rounded">+</button>
+              <button type="button" disabled={!modifica} onClick={() => updateItem(item.id, { quantity: Math.max(1, Number(item.quantity) - 1) })} className="w-8 h-8 border rounded">-</button>
+              <input type="number" disabled={!modifica} value={item.quantity} onChange={e => updateItem(item.id, { quantity: Number(e.target.value) })} className="border rounded px-2 py-1 w-16 text-center" />
+              <button type="button" disabled={!modifica} onClick={() => updateItem(item.id, { quantity: Number(item.quantity) + 1 })} className="w-8 h-8 border rounded">+</button>
             </div>
-            <input type="number" step="0.01" value={item.unit_price} onChange={e => updateItem(item.id, { unit_price: Number(e.target.value) })} className="border rounded px-2 py-1" />
-            <input type="number" min="0" max="100" value={(item as any).discount_percent || 0} onChange={e => updateItem(item.id, { discount_percent: Number(e.target.value) } as any)} className="border rounded px-2 py-1" title="Sconto %" />
-            <select value={trovaIva(item).code} onChange={e => setIva(item.id, e.target.value)} className="border rounded px-2 py-1 text-xs">
+            <input type="number" step="0.01" disabled={!modifica} value={item.unit_price} onChange={e => updateItem(item.id, { unit_price: Number(e.target.value) })} className="border rounded px-2 py-1" />
+            <input type="number" min="0" max="100" disabled={!modifica} value={(item as any).discount_percent || 0} onChange={e => updateItem(item.id, { discount_percent: Number(e.target.value) } as any)} className="border rounded px-2 py-1" title="Sconto %" />
+            <select disabled={!modifica} value={trovaIva(item).code} onChange={e => setIva(item.id, e.target.value)} className="border rounded px-2 py-1 text-xs">
               {ALIQUOTE.map(a => <option key={a.code} value={a.code}>{a.label}</option>)}
             </select>
-            <button type="button" onClick={() => removeItem(item.id)} className="text-red-600 text-sm">x</button>
+            {modifica ? <button type="button" onClick={() => removeItem(item.id)} className="text-red-600 text-sm">x</button> : null}
             {Number((item as any).discount_percent || 0) > 0 ? (
               <p className="text-xs text-slate-500 md:col-span-7">Listino EUR {Number(item.unit_price).toFixed(2)} · sconto {(item as any).discount_percent}% · paghi EUR {(Number(item.unit_price) * (1 - Number((item as any).discount_percent) / 100)).toFixed(2)}</p>
             ) : null}
@@ -338,14 +356,15 @@ export default function Editor() {
         ))}
         <p className="text-right font-bold">Imponibile EUR {tot.toFixed(2)} · IVA EUR {ivaTot.toFixed(2)} · Totale EUR {(tot + ivaTot).toFixed(2)}</p>
       </div>
-      <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={save} className="border px-4 py-2 rounded-lg bg-white">Salva</button>
-        <button type="button" onClick={togglePaid} className={'px-4 py-2 rounded-lg ' + (paid ? 'bg-green-600 text-white' : 'border bg-white')}>{paid ? 'Gia pagata' : 'Segna come pagata'}</button>
-        {invoiceId ? <Link to={'/stampa/' + invoiceId} className="bg-slate-900 text-white px-4 py-2 rounded-lg">Anteprima / Stampa</Link> : null}
-        <button type="button" onClick={marcaEmail} className="bg-sky-700 text-white px-4 py-2 rounded-lg">{emailSent ? 'Email gia inviata' : 'Invia email'}</button>
-        <button type="button" onClick={inviaSdi} className="bg-emerald-700 text-white px-4 py-2 rounded-lg">{sdiStatus === 'inviata_sdi' ? 'Gia inviata SDI' : 'Invia allo SDI'}</button>
-        <button type="button" onClick={eliminaFattura} className="bg-red-100 text-red-700 px-4 py-2 rounded-lg">Elimina fattura</button>
-      </div>
+      {modifica ? (
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={save} className="border px-4 py-2 rounded-lg bg-white">Salva</button>
+          <button type="button" onClick={togglePaid} className={'px-4 py-2 rounded-lg ' + (paid ? 'bg-green-600 text-white' : 'border bg-white')}>{paid ? 'Gia pagata' : 'Segna come pagata'}</button>
+          <button type="button" onClick={marcaEmail} className="bg-sky-700 text-white px-4 py-2 rounded-lg">{emailSent ? 'Email gia inviata' : 'Invia email'}</button>
+          <button type="button" onClick={inviaSdi} className="bg-emerald-700 text-white px-4 py-2 rounded-lg">{sdiStatus === 'inviata_sdi' ? 'Gia inviata SDI' : 'Invia allo SDI'}</button>
+          <button type="button" onClick={eliminaFattura} className="bg-red-100 text-red-700 px-4 py-2 rounded-lg">Elimina fattura</button>
+        </div>
+      ) : null}
     </div>
   )
 }
