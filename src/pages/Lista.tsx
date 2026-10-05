@@ -88,6 +88,7 @@ export default function Lista() {
 
   function vaiTab(t: string) {
     setTab(t)
+    setQ('')
     navigate(t === 'ricevute' ? '/ricevute' : '/emesse')
   }
 
@@ -95,10 +96,11 @@ export default function Lista() {
     ? []
     : clients.filter(c => (c as any).kind !== 'fornitore' && c.name.toLowerCase().includes(searchClient.toLowerCase()))
   const selected = clients.find(c => c.id === clientId)
+  const cerca = q.trim().toLowerCase()
 
   const filteredRows = rows.filter(r => {
-    const t = q.toLowerCase()
-    if (t && !(String(r.invoice_number || '').toLowerCase().includes(t) || String(r.clients?.name || '').toLowerCase().includes(t))) return false
+    if (clientId && r.client_id !== clientId) return false
+    if (cerca && !(String(r.invoice_number || '').toLowerCase().includes(cerca) || String(r.clients?.name || '').toLowerCase().includes(cerca))) return false
     if (filtroAnno && annoDi(r) !== filtroAnno) return false
     if (filtro === 'inviate') return r.sdi_status === 'inviata_sdi' || r.sdi_status === 'consegnata'
     if (filtro === 'da_inviare') return r.sdi_status === 'da_inviare' || r.sdi_status === 'bozza'
@@ -111,8 +113,7 @@ export default function Lista() {
   })
 
   const filteredRicevute = ricevute.filter(r => {
-    const t = q.toLowerCase()
-    if (t && !(String(r.invoice_number || '').toLowerCase().includes(t) || String(r.suppliers?.name || '').toLowerCase().includes(t))) return false
+    if (cerca && !(String(r.invoice_number || '').toLowerCase().includes(cerca) || String(r.suppliers?.name || '').toLowerCase().includes(cerca))) return false
     const anno = annoDi(r)
     if (filtroAnno && anno && anno !== filtroAnno) return false
     if (filtro === 'pagate') return !!r.paid
@@ -147,17 +148,25 @@ export default function Lista() {
       return { imponibile, iva: totale - imponibile, totale, n: lista.length }
     }
     const annoCorrente = String(new Date().getFullYear())
-    const clientiCorrente = rows.filter(r => annoDi(r) === annoCorrente)
-    const clientiScelto = filtroAnno ? rows.filter(r => annoDi(r) === filtroAnno) : rows
-    const fornitoriCorrente = ricevute.filter(r => annoDi(r) === annoCorrente)
-    const fornitoriScelto = filtroAnno ? ricevute.filter(r => !annoDi(r) || annoDi(r) === filtroAnno) : ricevute
+    const baseClienti = rows.filter(r => {
+      if (clientId && r.client_id !== clientId) return false
+      if (cerca && !(String(r.invoice_number || '').toLowerCase().includes(cerca) || String(r.clients?.name || '').toLowerCase().includes(cerca))) return false
+      return true
+    })
+    const baseFornitori = ricevute.filter(r => {
+      if (cerca && !(String(r.invoice_number || '').toLowerCase().includes(cerca) || String(r.suppliers?.name || '').toLowerCase().includes(cerca))) return false
+      return true
+    })
     return {
-      clientiCorrente: contoClienti(clientiCorrente),
-      clientiScelto: contoClienti(clientiScelto),
-      fornitoriCorrente: contoFornitori(fornitoriCorrente),
-      fornitoriScelto: contoFornitori(fornitoriScelto),
+      clientiCorrente: contoClienti(baseClienti.filter(r => annoDi(r) === annoCorrente)),
+      clientiScelto: contoClienti(filtroAnno ? baseClienti.filter(r => annoDi(r) === filtroAnno) : baseClienti),
+      fornitoriCorrente: contoFornitori(baseFornitori.filter(r => annoDi(r) === annoCorrente)),
+      fornitoriScelto: contoFornitori(filtroAnno ? baseFornitori.filter(r => !annoDi(r) || annoDi(r) === filtroAnno) : baseFornitori),
     }
-  }, [rows, ricevute, itemsAll, filtroAnno])
+  }, [rows, ricevute, itemsAll, filtroAnno, clientId, cerca])
+
+  const titoloCliente = selected ? selected.name : (cerca || 'tutti i clienti')
+  const titoloFornitore = cerca || 'tutti i fornitori'
 
   return (
     <div className="space-y-6">
@@ -179,28 +188,35 @@ export default function Lista() {
         <button type="button" onClick={() => setFiltro('pagate')} className={'px-3 py-2 rounded-lg text-sm ' + (filtro === 'pagate' ? 'bg-green-700 text-white' : 'border')}>Pagate</button>
         <button type="button" onClick={() => setFiltro('non_pagate')} className={'px-3 py-2 rounded-lg text-sm ' + (filtro === 'non_pagate' ? 'bg-green-700 text-white' : 'border')}>Non pagate</button>
       </div>
-      <div className="grid md:grid-cols-2 gap-3">
-        <div className="bg-white rounded-xl shadow p-4">
-          <p className="text-xs text-slate-500">Clienti {new Date().getFullYear()} · {stats.clientiCorrente.n} documenti</p>
-          <p className="text-xl font-bold">EUR {stats.clientiCorrente.totale.toFixed(2)}</p>
-          <p className="text-sm text-slate-500">Imponibile {stats.clientiCorrente.imponibile.toFixed(2)} · IVA {stats.clientiCorrente.iva.toFixed(2)}</p>
+
+      {tab === 'emesse' ? (
+        <div className="grid md:grid-cols-2 gap-3">
+          <div className="bg-white rounded-xl shadow p-4">
+            <p className="text-xs text-slate-500">Clienti {new Date().getFullYear()} · {titoloCliente}</p>
+            <p className="text-xl font-bold">EUR {stats.clientiCorrente.totale.toFixed(2)}</p>
+            <p className="text-sm text-slate-500">Imponibile {stats.clientiCorrente.imponibile.toFixed(2)} · IVA {stats.clientiCorrente.iva.toFixed(2)} · {stats.clientiCorrente.n} documenti</p>
+          </div>
+          <div className="bg-white rounded-xl shadow p-4">
+            <p className="text-xs text-slate-500">Clienti {filtroAnno || 'tutti gli anni'} · {titoloCliente}</p>
+            <p className="text-xl font-bold">EUR {stats.clientiScelto.totale.toFixed(2)}</p>
+            <p className="text-sm text-slate-500">Imponibile {stats.clientiScelto.imponibile.toFixed(2)} · IVA {stats.clientiScelto.iva.toFixed(2)} · {stats.clientiScelto.n} documenti</p>
+          </div>
         </div>
-        <div className="bg-white rounded-xl shadow p-4">
-          <p className="text-xs text-slate-500">Clienti {filtroAnno || 'tutti gli anni'} · {stats.clientiScelto.n} documenti</p>
-          <p className="text-xl font-bold">EUR {stats.clientiScelto.totale.toFixed(2)}</p>
-          <p className="text-sm text-slate-500">Imponibile {stats.clientiScelto.imponibile.toFixed(2)} · IVA {stats.clientiScelto.iva.toFixed(2)}</p>
+      ) : (
+        <div className="grid md:grid-cols-2 gap-3">
+          <div className="bg-white rounded-xl shadow p-4">
+            <p className="text-xs text-slate-500">Fornitori {new Date().getFullYear()} · {titoloFornitore}</p>
+            <p className="text-xl font-bold">EUR {stats.fornitoriCorrente.totale.toFixed(2)}</p>
+            <p className="text-sm text-slate-500">Imponibile {stats.fornitoriCorrente.imponibile.toFixed(2)} · IVA {stats.fornitoriCorrente.iva.toFixed(2)} · {stats.fornitoriCorrente.n} fatture</p>
+          </div>
+          <div className="bg-white rounded-xl shadow p-4">
+            <p className="text-xs text-slate-500">Fornitori {filtroAnno || 'tutti gli anni'} · {titoloFornitore}</p>
+            <p className="text-xl font-bold">EUR {stats.fornitoriScelto.totale.toFixed(2)}</p>
+            <p className="text-sm text-slate-500">Imponibile {stats.fornitoriScelto.imponibile.toFixed(2)} · IVA {stats.fornitoriScelto.iva.toFixed(2)} · {stats.fornitoriScelto.n} fatture</p>
+          </div>
         </div>
-        <div className="bg-white rounded-xl shadow p-4">
-          <p className="text-xs text-slate-500">Fornitori {new Date().getFullYear()} · {stats.fornitoriCorrente.n} fatture</p>
-          <p className="text-xl font-bold">EUR {stats.fornitoriCorrente.totale.toFixed(2)}</p>
-          <p className="text-sm text-slate-500">Imponibile {stats.fornitoriCorrente.imponibile.toFixed(2)} · IVA {stats.fornitoriCorrente.iva.toFixed(2)}</p>
-        </div>
-        <div className="bg-white rounded-xl shadow p-4">
-          <p className="text-xs text-slate-500">Fornitori {filtroAnno || 'tutti gli anni'} · {stats.fornitoriScelto.n} fatture</p>
-          <p className="text-xl font-bold">EUR {stats.fornitoriScelto.totale.toFixed(2)}</p>
-          <p className="text-sm text-slate-500">Imponibile {stats.fornitoriScelto.imponibile.toFixed(2)} · IVA {stats.fornitoriScelto.iva.toFixed(2)}</p>
-        </div>
-      </div>
+      )}
+
       {tab === 'emesse' ? (
         <div className="bg-white rounded-xl shadow p-4 space-y-3">
           <h2 className="font-semibold">Scegli il cliente</h2>
@@ -215,12 +231,17 @@ export default function Lista() {
           ) : (
             <p className="text-sm text-slate-500">Nessun elenco finche non cerchi</p>
           )}
-          {selected ? <p className="text-sm text-green-700">Cliente: {selected.name}</p> : null}
+          {selected ? (
+            <div className="flex gap-2 items-center">
+              <p className="text-sm text-green-700">Statistiche di: {selected.name}</p>
+              <button type="button" onClick={() => setClientId('')} className="text-sm text-slate-500">Tutti i clienti</button>
+            </div>
+          ) : null}
           <button type="button" onClick={() => crea('fattura')} className="bg-slate-900 text-white px-4 py-2 rounded-lg">Crea fattura</button>
           <button type="button" onClick={() => crea('nota_credito')} className="border px-4 py-2 rounded-lg ml-2">Crea nota di credito</button>
         </div>
       ) : null}
-      <input value={q} onChange={e => setQ(e.target.value)} placeholder="Cerca numero o nome..." className="w-full border rounded-lg px-3 py-2 bg-white" />
+      <input value={q} onChange={e => setQ(e.target.value)} placeholder={tab === 'emesse' ? 'Cerca cliente o numero...' : 'Cerca fornitore o numero...'} className="w-full border rounded-lg px-3 py-2 bg-white" />
       {tab === 'emesse' ? (
         <div className="bg-white rounded-xl shadow divide-y">
           {filteredRows.length === 0 ? <p className="p-6 text-slate-500">Nessuna fattura</p> : null}
