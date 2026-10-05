@@ -20,18 +20,55 @@ function statoClass(s: string) {
   return 'bg-slate-100 text-slate-700'
 }
 
+function trimestre(d: Date) {
+  return Math.floor(d.getMonth() / 3) + 1
+}
+
 export default function Home() {
   const [rows, setRows] = useState<any[]>([])
+  const [items, setItems] = useState<any[]>([])
   const [filtro, setFiltro] = useState('tutte')
+  const [trim, setTrim] = useState(Math.floor(new Date().getMonth() / 3) + 1)
+  const anno = new Date().getFullYear()
 
   useEffect(() => {
-    supabase.from('invoices').select('id, invoice_number, invoice_type, sdi_status, paid, invoice_date, created_at, clients(name)').order('created_at', { ascending: false }).then(({ data }) => setRows(data || []))
+    supabase.from('invoices').select('id, invoice_number, invoice_type, sdi_status, paid, invoice_date, created_at, taxable, clients(name)').order('created_at', { ascending: false }).then(({ data }) => setRows(data || []))
+    supabase.from('invoice_items').select('invoice_id, quantity, unit_price, vat_rate').then(({ data }) => setItems(data || []))
   }, [])
+
+  function inviata(r: any) {
+    return r.sdi_status === 'inviata_sdi' || r.sdi_status === 'consegnata'
+  }
+  function dataDi(r: any) {
+    return new Date(r.invoice_date || r.created_at)
+  }
+  function nelTrimestre(r: any) {
+    const d = dataDi(r)
+    return d.getFullYear() === anno && trimestre(d) === trim && inviata(r)
+  }
+  function nellAnno(r: any) {
+    return dataDi(r).getFullYear() === anno && inviata(r)
+  }
+  function conto(lista: any[]) {
+    const ids = new Set(lista.map(r => r.id))
+    let imponibile = 0
+    let iva = 0
+    for (const i of items) {
+      if (!ids.has(i.invoice_id)) continue
+      const imp = Number(i.quantity) * Number(i.unit_price)
+      const segno = lista.find(r => r.id === i.invoice_id)?.invoice_type === 'nota_credito' ? -1 : 1
+      imponibile += imp * segno
+      iva += imp * (Number(i.vat_rate || 0) / 100) * segno
+    }
+    return { imponibile, iva, totale: imponibile + iva, n: lista.length }
+  }
+  const annoInv = conto(rows.filter(nellAnno))
+  const trimInv = conto(rows.filter(nelTrimestre))
 
   const filtered = rows.filter(r => {
     if (filtro === 'pagate') return !!r.paid
     if (filtro === 'non_pagate') return !r.paid
-    if (filtro === 'inviate') return r.sdi_status === 'inviata_sdi' || r.sdi_status === 'consegnata'
+    if (filtro === 'inviate') return inviata(r)
     if (filtro === 'da_inviare') return r.sdi_status === 'da_inviare' || r.sdi_status === 'bozza' || !r.sdi_status
     if (filtro === 'scartate') return r.sdi_status === 'scartata'
     if (filtro === 'nc') return r.invoice_type === 'nota_credito'
@@ -41,7 +78,7 @@ export default function Home() {
   const n = (key: string) => rows.filter(r => {
     if (key === 'pagate') return !!r.paid
     if (key === 'non_pagate') return !r.paid
-    if (key === 'inviate') return r.sdi_status === 'inviata_sdi' || r.sdi_status === 'consegnata'
+    if (key === 'inviate') return inviata(r)
     if (key === 'da_inviare') return r.sdi_status === 'da_inviare' || r.sdi_status === 'bozza' || !r.sdi_status
     if (key === 'scartate') return r.sdi_status === 'scartata'
     if (key === 'nc') return r.invoice_type === 'nota_credito'
@@ -51,6 +88,23 @@ export default function Home() {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Panoramica fatture</h1>
+      <div className="flex flex-wrap gap-2">
+        {[1, 2, 3, 4].map(t => (
+          <button key={t} type="button" onClick={() => setTrim(t)} className={'px-3 py-2 rounded-full text-sm ' + (trim === t ? 'bg-blue-700 text-white' : 'bg-white border')}>T{t}</button>
+        ))}
+      </div>
+      <div className="grid md:grid-cols-2 gap-3">
+        <div className="bg-white rounded-xl shadow p-4">
+          <p className="text-xs text-slate-500">Inviate {anno}</p>
+          <p className="text-xl font-bold">EUR {annoInv.totale.toFixed(2)}</p>
+          <p className="text-sm text-slate-500">Imponibile {annoInv.imponibile.toFixed(2)} · IVA {annoInv.iva.toFixed(2)} · {annoInv.n} fatture</p>
+        </div>
+        <div className="bg-white rounded-xl shadow p-4">
+          <p className="text-xs text-slate-500">Inviate T{trim} {anno}</p>
+          <p className="text-xl font-bold">EUR {trimInv.totale.toFixed(2)}</p>
+          <p className="text-sm text-slate-500">Imponibile {trimInv.imponibile.toFixed(2)} · IVA {trimInv.iva.toFixed(2)} · {trimInv.n} fatture</p>
+        </div>
+      </div>
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={() => setFiltro('tutte')} className={'px-3 py-2 rounded-full text-sm ' + (filtro === 'tutte' ? 'bg-slate-900 text-white' : 'bg-white border')}>Tutte ({n('tutte')})</button>
         <button type="button" onClick={() => setFiltro('da_inviare')} className={'px-3 py-2 rounded-full text-sm ' + (filtro === 'da_inviare' ? 'bg-amber-600 text-white' : 'bg-white border')}>Da inviare ({n('da_inviare')})</button>
