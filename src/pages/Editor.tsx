@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
@@ -76,7 +75,7 @@ export default function Editor() {
       if (href.indexOf('/stampa/') >= 0) return
       e.preventDefault()
       e.stopPropagation()
-      const ok = await salvaOElimina()
+      const ok = await salvaOAbbandona()
       if (ok) window.location.href = a.href
     }
     window.addEventListener('beforeunload', onLeave)
@@ -87,34 +86,40 @@ export default function Editor() {
     }
   }, [dirty, modifica, clientId, invoiceId, oggetto, notes, number, tipo, paid, items])
 
-  async function salvaOElimina() {
+  async function scriviRighe() {
+    for (const item of items) {
+      await supabase.from('invoice_items').update({
+        name: item.name,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        vat_rate: item.vat_rate,
+        vat_note: (item as any).vat_note || null,
+        discount_percent: (item as any).discount_percent || 0,
+      }).eq('id', item.id)
+    }
+  }
+
+  async function salvaOAbbandona() {
+    const salva = confirm('Salvare le modifiche?\nOK = salva\nAnnulla = abbandona e lascia la fattura com era')
+    if (!salva) {
+      setDirty(false)
+      setModifica(false)
+      return true
+    }
     if (!clientId) {
-      const elimina = confirm('Senza destinatario non si puo salvare. Eliminare la fattura?')
-      if (!elimina) return false
-      if (invoiceId) {
-        await supabase.from('invoice_items').delete().eq('invoice_id', invoiceId)
-        await supabase.from('invoices').delete().eq('id', invoiceId)
-      }
+      alert('Senza destinatario non salvo. La fattura resta com era.')
       setDirty(false)
+      setModifica(false)
       return true
     }
-    const salva = confirm('Salvare la fattura prima di uscire?\nOK = salva\nAnnulla = elimina')
-    if (salva) {
-      const taxable = items.reduce((s, i) => s + netto(i), 0)
-      const { error } = await supabase.from('invoices').update({
-        client_id: clientId, oggetto, notes, invoice_number: number, taxable, invoice_type: tipo, sdi_status: 'da_inviare', paid,
-      }).eq('id', invoiceId)
-      if (error) { alert(error.message); return false }
-      setDirty(false)
-      return true
-    }
-    const elimina = confirm('Eliminare questa fattura?')
-    if (!elimina) return false
-    if (invoiceId) {
-      await supabase.from('invoice_items').delete().eq('invoice_id', invoiceId)
-      await supabase.from('invoices').delete().eq('id', invoiceId)
-    }
+    await scriviRighe()
+    const taxable = items.reduce((s, i) => s + netto(i), 0)
+    const { error } = await supabase.from('invoices').update({
+      client_id: clientId, oggetto, notes, invoice_number: number, taxable, invoice_type: tipo, sdi_status: 'da_inviare', paid,
+    }).eq('id', invoiceId)
+    if (error) { alert(error.message); return false }
     setDirty(false)
+    setModifica(false)
     return true
   }
 
@@ -160,6 +165,7 @@ export default function Editor() {
   async function save() {
     if (!invoiceId) return
     if (!clientId) return alert('Seleziona il destinatario prima di salvare')
+    await scriviRighe()
     const taxable = items.reduce((s, i) => s + netto(i), 0)
     const { error } = await supabase.from('invoices').update({
       client_id: clientId, oggetto, notes, invoice_number: number, taxable, invoice_type: tipo, sdi_status: 'da_inviare', paid,
@@ -173,7 +179,6 @@ export default function Editor() {
     if (!confirm('Cambiare il destinatario in ' + c.name + '?')) return
     setClientId(c.id)
     setDirty(true)
-    if (invoiceId) await supabase.from('invoices').update({ client_id: c.id }).eq('id', invoiceId)
     setCambia(false)
     setCercaDest('')
   }
@@ -191,9 +196,8 @@ export default function Editor() {
   async function togglePaid() {
     if (!invoiceId || !modifica) return
     if (!clientId) return alert('Seleziona il destinatario prima di salvare')
-    const next = !paid
-    await supabase.from('invoices').update({ paid: next }).eq('id', invoiceId)
-    setPaid(next)
+    setPaid(!paid)
+    setDirty(true)
   }
 
   async function inviaSdi() {
@@ -229,7 +233,6 @@ export default function Editor() {
   async function updateItem(itemId: string, patch: Partial<InvoiceItem>) {
     if (!modifica) return
     setDirty(true)
-    await supabase.from('invoice_items').update(patch).eq('id', itemId)
     setItems(prev => prev.map(i => i.id === itemId ? { ...i, ...patch } : i))
   }
 
@@ -255,7 +258,6 @@ export default function Editor() {
   async function removeItem(itemId: string) {
     if (!modifica) return
     setDirty(true)
-    await supabase.from('invoice_items').delete().eq('id', itemId)
     setItems(prev => prev.filter(i => i.id !== itemId))
   }
 
