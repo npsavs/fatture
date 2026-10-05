@@ -163,13 +163,13 @@ export default function Lista() {
       if (cerca && !(String(r.invoice_number || '').toLowerCase().includes(cerca) || String(r.suppliers?.name || '').toLowerCase().includes(cerca))) return false
       return true
     })
+    const clientiAnno = filtroAnno ? baseClienti.filter(r => annoDi(r) === filtroAnno) : baseClienti
+    const fornitoriAnno = filtroAnno ? baseFornitori.filter(r => !annoDi(r) || annoDi(r) === filtroAnno) : baseFornitori
     return {
-      clientiCorrente: contoClienti(baseClienti.filter(r => annoDi(r) === annoCorrente)),
       clientiTrim: contoClienti(baseClienti.filter(r => annoDi(r) === annoCorrente && trimestreDi(r) === trim)),
-      clientiScelto: contoClienti(filtroAnno ? baseClienti.filter(r => annoDi(r) === filtroAnno) : baseClienti),
-      fornitoriCorrente: contoFornitori(baseFornitori.filter(r => annoDi(r) === annoCorrente)),
+      clientiSceltoTrim: contoClienti(clientiAnno.filter(r => trimestreDi(r) === trim)),
       fornitoriTrim: contoFornitori(baseFornitori.filter(r => annoDi(r) === annoCorrente && trimestreDi(r) === trim)),
-      fornitoriScelto: contoFornitori(filtroAnno ? baseFornitori.filter(r => !annoDi(r) || annoDi(r) === filtroAnno) : baseFornitori),
+      fornitoriSceltoTrim: contoFornitori(fornitoriAnno.filter(r => trimestreDi(r) === trim)),
     }
   }, [rows, ricevute, itemsAll, filtroAnno, clientId, cerca, trim])
 
@@ -201,39 +201,29 @@ export default function Lista() {
       </div>
 
       {tab === 'emesse' ? (
-        <div className="grid md:grid-cols-3 gap-3">
+        <div className="grid md:grid-cols-2 gap-3">
           <div className="bg-white rounded-xl shadow p-4">
-            <p className="text-xs text-slate-500">Clienti {annoCorrente} · {titoloCliente}</p>
-            <p className="text-xl font-bold">EUR {stats.clientiCorrente.totale.toFixed(2)}</p>
-            <p className="text-sm text-slate-500">Imponibile {stats.clientiCorrente.imponibile.toFixed(2)} · IVA {stats.clientiCorrente.iva.toFixed(2)} · {stats.clientiCorrente.n}</p>
-          </div>
-          <div className="bg-white rounded-xl shadow p-4">
-            <p className="text-xs text-slate-500">Clienti T{trim} {annoCorrente} · {titoloCliente}</p>
+            <p className="text-xs text-slate-500">Clienti {annoCorrente} · T{trim} · {titoloCliente}</p>
             <p className="text-xl font-bold">EUR {stats.clientiTrim.totale.toFixed(2)}</p>
             <p className="text-sm text-slate-500">Imponibile {stats.clientiTrim.imponibile.toFixed(2)} · IVA {stats.clientiTrim.iva.toFixed(2)} · {stats.clientiTrim.n}</p>
           </div>
           <div className="bg-white rounded-xl shadow p-4">
-            <p className="text-xs text-slate-500">Clienti {filtroAnno || 'tutti gli anni'} · {titoloCliente}</p>
-            <p className="text-xl font-bold">EUR {stats.clientiScelto.totale.toFixed(2)}</p>
-            <p className="text-sm text-slate-500">Imponibile {stats.clientiScelto.imponibile.toFixed(2)} · IVA {stats.clientiScelto.iva.toFixed(2)} · {stats.clientiScelto.n}</p>
+            <p className="text-xs text-slate-500">Clienti {filtroAnno || 'tutti gli anni'} · T{trim} · {titoloCliente}</p>
+            <p className="text-xl font-bold">EUR {stats.clientiSceltoTrim.totale.toFixed(2)}</p>
+            <p className="text-sm text-slate-500">Imponibile {stats.clientiSceltoTrim.imponibile.toFixed(2)} · IVA {stats.clientiSceltoTrim.iva.toFixed(2)} · {stats.clientiSceltoTrim.n}</p>
           </div>
         </div>
       ) : (
-        <div className="grid md:grid-cols-3 gap-3">
+        <div className="grid md:grid-cols-2 gap-3">
           <div className="bg-white rounded-xl shadow p-4">
-            <p className="text-xs text-slate-500">Fornitori {annoCorrente} · {titoloFornitore}</p>
-            <p className="text-xl font-bold">EUR {stats.fornitoriCorrente.totale.toFixed(2)}</p>
-            <p className="text-sm text-slate-500">Imponibile {stats.fornitoriCorrente.imponibile.toFixed(2)} · IVA {stats.fornitoriCorrente.iva.toFixed(2)} · {stats.fornitoriCorrente.n}</p>
-          </div>
-          <div className="bg-white rounded-xl shadow p-4">
-            <p className="text-xs text-slate-500">Fornitori T{trim} {annoCorrente} · {titoloFornitore}</p>
+            <p className="text-xs text-slate-500">Fornitori {annoCorrente} · T{trim} · {titoloFornitore}</p>
             <p className="text-xl font-bold">EUR {stats.fornitoriTrim.totale.toFixed(2)}</p>
             <p className="text-sm text-slate-500">Imponibile {stats.fornitoriTrim.imponibile.toFixed(2)} · IVA {stats.fornitoriTrim.iva.toFixed(2)} · {stats.fornitoriTrim.n}</p>
           </div>
           <div className="bg-white rounded-xl shadow p-4">
-            <p className="text-xs text-slate-500">Fornitori {filtroAnno || 'tutti gli anni'} · {titoloFornitore}</p>
-            <p className="text-xl font-bold">EUR {stats.fornitoriScelto.totale.toFixed(2)}</p>
-            <p className="text-sm text-slate-500">Imponibile {stats.fornitoriScelto.imponibile.toFixed(2)} · IVA {stats.fornitoriScelto.iva.toFixed(2)} · {stats.fornitoriScelto.n}</p>
+            <p className="text-xs text-slate-500">Fornitori {filtroAnno || 'tutti gli anni'} · T{trim} · {titoloFornitore}</p>
+            <p className="text-xl font-bold">EUR {stats.fornitoriSceltoTrim.totale.toFixed(2)}</p>
+            <p className="text-sm text-slate-500">Imponibile {stats.fornitoriSceltoTrim.imponibile.toFixed(2)} · IVA {stats.fornitoriSceltoTrim.iva.toFixed(2)} · {stats.fornitoriSceltoTrim.n}</p>
           </div>
         </div>
       )}
