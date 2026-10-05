@@ -32,7 +32,7 @@ export default function Home() {
   const anno = new Date().getFullYear()
 
   useEffect(() => {
-    supabase.from('invoices').select('id, invoice_number, invoice_type, sdi_status, paid, invoice_date, created_at, taxable, clients(name)').order('created_at', { ascending: false }).then(({ data }) => setRows(data || []))
+    supabase.from('invoices').select('id, invoice_number, invoice_type, sdi_status, paid, invoice_date, created_at, clients(name)').order('created_at', { ascending: false }).then(({ data }) => setRows(data || []))
     supabase.from('invoice_items').select('invoice_id, quantity, unit_price, vat_rate').then(({ data }) => setItems(data || []))
   }, [])
 
@@ -41,13 +41,6 @@ export default function Home() {
   }
   function dataDi(r: any) {
     return new Date(r.invoice_date || r.created_at)
-  }
-  function nelTrimestre(r: any) {
-    const d = dataDi(r)
-    return d.getFullYear() === anno && trimestre(d) === trim && inviata(r)
-  }
-  function nellAnno(r: any) {
-    return dataDi(r).getFullYear() === anno && inviata(r)
   }
   function conto(lista: any[]) {
     const ids = new Set(lista.map(r => r.id))
@@ -62,8 +55,10 @@ export default function Home() {
     }
     return { imponibile, iva, totale: imponibile + iva, n: lista.length }
   }
-  const annoInv = conto(rows.filter(nellAnno))
-  const trimInv = conto(rows.filter(nelTrimestre))
+  const inviateAnno = rows.filter(r => dataDi(r).getFullYear() === anno && inviata(r))
+  const inviateTrim = inviateAnno.filter(r => trimestre(dataDi(r)) === trim)
+  const annoInv = conto(inviateAnno)
+  const trimInv = conto(inviateTrim)
 
   const filtered = rows.filter(r => {
     if (filtro === 'pagate') return !!r.paid

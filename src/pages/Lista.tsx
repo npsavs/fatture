@@ -163,13 +163,17 @@ export default function Lista() {
       if (cerca && !(String(r.invoice_number || '').toLowerCase().includes(cerca) || String(r.suppliers?.name || '').toLowerCase().includes(cerca))) return false
       return true
     })
-    const clientiAnno = filtroAnno ? baseClienti.filter(r => annoDi(r) === filtroAnno) : baseClienti
-    const fornitoriAnno = filtroAnno ? baseFornitori.filter(r => !annoDi(r) || annoDi(r) === filtroAnno) : baseFornitori
+    const ricercaClienti = filtroAnno ? baseClienti.filter(r => annoDi(r) === filtroAnno) : baseClienti
+    const ricercaFornitori = filtroAnno ? baseFornitori.filter(r => !annoDi(r) || annoDi(r) === filtroAnno) : baseFornitori
     return {
-      clientiTrim: contoClienti(baseClienti.filter(r => annoDi(r) === annoCorrente && trimestreDi(r) === trim)),
-      clientiSceltoTrim: contoClienti(clientiAnno.filter(r => trimestreDi(r) === trim)),
-      fornitoriTrim: contoFornitori(baseFornitori.filter(r => annoDi(r) === annoCorrente && trimestreDi(r) === trim)),
-      fornitoriSceltoTrim: contoFornitori(fornitoriAnno.filter(r => trimestreDi(r) === trim)),
+      clientiAnno: contoClienti(rows.filter(r => annoDi(r) === annoCorrente)),
+      clientiTrim: contoClienti(rows.filter(r => annoDi(r) === annoCorrente && trimestreDi(r) === trim)),
+      clientiRicerca: contoClienti(ricercaClienti),
+      clientiRicercaTrim: contoClienti(ricercaClienti.filter(r => trimestreDi(r) === trim)),
+      fornitoriAnno: contoFornitori(ricevute.filter(r => annoDi(r) === annoCorrente)),
+      fornitoriTrim: contoFornitori(ricevute.filter(r => annoDi(r) === annoCorrente && trimestreDi(r) === trim)),
+      fornitoriRicerca: contoFornitori(ricercaFornitori),
+      fornitoriRicercaTrim: contoFornitori(ricercaFornitori.filter(r => trimestreDi(r) === trim)),
     }
   }, [rows, ricevute, itemsAll, filtroAnno, clientId, cerca, trim])
 
@@ -203,27 +207,47 @@ export default function Lista() {
       {tab === 'emesse' ? (
         <div className="grid md:grid-cols-2 gap-3">
           <div className="bg-white rounded-xl shadow p-4">
-            <p className="text-xs text-slate-500">Clienti {annoCorrente} · T{trim} · {titoloCliente}</p>
+            <p className="text-xs text-slate-500">Totale clienti {annoCorrente}</p>
+            <p className="text-xl font-bold">EUR {stats.clientiAnno.totale.toFixed(2)}</p>
+            <p className="text-sm text-slate-500">Imponibile {stats.clientiAnno.imponibile.toFixed(2)} · IVA {stats.clientiAnno.iva.toFixed(2)} · {stats.clientiAnno.n}</p>
+          </div>
+          <div className="bg-white rounded-xl shadow p-4">
+            <p className="text-xs text-slate-500">Trimestre clienti T{trim} {annoCorrente}</p>
             <p className="text-xl font-bold">EUR {stats.clientiTrim.totale.toFixed(2)}</p>
             <p className="text-sm text-slate-500">Imponibile {stats.clientiTrim.imponibile.toFixed(2)} · IVA {stats.clientiTrim.iva.toFixed(2)} · {stats.clientiTrim.n}</p>
           </div>
           <div className="bg-white rounded-xl shadow p-4">
-            <p className="text-xs text-slate-500">Clienti {filtroAnno || 'tutti gli anni'} · T{trim} · {titoloCliente}</p>
-            <p className="text-xl font-bold">EUR {stats.clientiSceltoTrim.totale.toFixed(2)}</p>
-            <p className="text-sm text-slate-500">Imponibile {stats.clientiSceltoTrim.imponibile.toFixed(2)} · IVA {stats.clientiSceltoTrim.iva.toFixed(2)} · {stats.clientiSceltoTrim.n}</p>
+            <p className="text-xs text-slate-500">Totale ricerca · {titoloCliente} · {filtroAnno || 'tutti gli anni'}</p>
+            <p className="text-xl font-bold">EUR {stats.clientiRicerca.totale.toFixed(2)}</p>
+            <p className="text-sm text-slate-500">Imponibile {stats.clientiRicerca.imponibile.toFixed(2)} · IVA {stats.clientiRicerca.iva.toFixed(2)} · {stats.clientiRicerca.n}</p>
+          </div>
+          <div className="bg-white rounded-xl shadow p-4">
+            <p className="text-xs text-slate-500">Trimestre ricerca T{trim} · {titoloCliente}</p>
+            <p className="text-xl font-bold">EUR {stats.clientiRicercaTrim.totale.toFixed(2)}</p>
+            <p className="text-sm text-slate-500">Imponibile {stats.clientiRicercaTrim.imponibile.toFixed(2)} · IVA {stats.clientiRicercaTrim.iva.toFixed(2)} · {stats.clientiRicercaTrim.n}</p>
           </div>
         </div>
       ) : (
         <div className="grid md:grid-cols-2 gap-3">
           <div className="bg-white rounded-xl shadow p-4">
-            <p className="text-xs text-slate-500">Fornitori {annoCorrente} · T{trim} · {titoloFornitore}</p>
+            <p className="text-xs text-slate-500">Totale fornitori {annoCorrente}</p>
+            <p className="text-xl font-bold">EUR {stats.fornitoriAnno.totale.toFixed(2)}</p>
+            <p className="text-sm text-slate-500">Imponibile {stats.fornitoriAnno.imponibile.toFixed(2)} · IVA {stats.fornitoriAnno.iva.toFixed(2)} · {stats.fornitoriAnno.n}</p>
+          </div>
+          <div className="bg-white rounded-xl shadow p-4">
+            <p className="text-xs text-slate-500">Trimestre fornitori T{trim} {annoCorrente}</p>
             <p className="text-xl font-bold">EUR {stats.fornitoriTrim.totale.toFixed(2)}</p>
             <p className="text-sm text-slate-500">Imponibile {stats.fornitoriTrim.imponibile.toFixed(2)} · IVA {stats.fornitoriTrim.iva.toFixed(2)} · {stats.fornitoriTrim.n}</p>
           </div>
           <div className="bg-white rounded-xl shadow p-4">
-            <p className="text-xs text-slate-500">Fornitori {filtroAnno || 'tutti gli anni'} · T{trim} · {titoloFornitore}</p>
-            <p className="text-xl font-bold">EUR {stats.fornitoriSceltoTrim.totale.toFixed(2)}</p>
-            <p className="text-sm text-slate-500">Imponibile {stats.fornitoriSceltoTrim.imponibile.toFixed(2)} · IVA {stats.fornitoriSceltoTrim.iva.toFixed(2)} · {stats.fornitoriSceltoTrim.n}</p>
+            <p className="text-xs text-slate-500">Totale ricerca · {titoloFornitore} · {filtroAnno || 'tutti gli anni'}</p>
+            <p className="text-xl font-bold">EUR {stats.fornitoriRicerca.totale.toFixed(2)}</p>
+            <p className="text-sm text-slate-500">Imponibile {stats.fornitoriRicerca.imponibile.toFixed(2)} · IVA {stats.fornitoriRicerca.iva.toFixed(2)} · {stats.fornitoriRicerca.n}</p>
+          </div>
+          <div className="bg-white rounded-xl shadow p-4">
+            <p className="text-xs text-slate-500">Trimestre ricerca T{trim} · {titoloFornitore}</p>
+            <p className="text-xl font-bold">EUR {stats.fornitoriRicercaTrim.totale.toFixed(2)}</p>
+            <p className="text-sm text-slate-500">Imponibile {stats.fornitoriRicercaTrim.imponibile.toFixed(2)} · IVA {stats.fornitoriRicercaTrim.iva.toFixed(2)} · {stats.fornitoriRicercaTrim.n}</p>
           </div>
         </div>
       )}
