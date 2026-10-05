@@ -8,6 +8,10 @@ const IBAN = 'IT58L0306939530100000007583'
 const BIC = 'BCITITMM'
 const INTESTATO = 'Nuovo Punto Sicurezza Snc'
 
+function nettoUnitario(row: any) {
+  return Number(row.unit_price) * (1 - Number(row.discount_percent || 0) / 100)
+}
+
 export default function Stampa() {
   const { id } = useParams()
   const [inv, setInv] = useState<any>(null)
@@ -29,8 +33,8 @@ export default function Stampa() {
 
   if (!inv) return <div className="text-center py-10">Caricamento...</div>
 
-  const imponibile = items.reduce((s, i) => s + Number(i.quantity) * Number(i.unit_price), 0)
-  const iva = items.reduce((s, i) => s + Number(i.quantity) * Number(i.unit_price) * (Number(i.vat_rate || 0) / 100), 0)
+  const imponibile = items.reduce((s, i) => s + Number(i.quantity) * nettoUnitario(i), 0)
+  const iva = items.reduce((s, i) => s + Number(i.quantity) * nettoUnitario(i) * (Number(i.vat_rate || 0) / 100), 0)
   const totale = imponibile + iva
   const dataFatt = inv.invoice_date || inv.created_at
   const address = client ? [client.address, client.zip, client.city, client.province].filter(Boolean).join(' ') : ''
@@ -77,12 +81,19 @@ export default function Stampa() {
           </thead>
           <tbody>
             {items.map(row => {
-              const tot = Number(row.quantity) * Number(row.unit_price)
+              const sconto = Number(row.discount_percent || 0)
+              const prezzo = nettoUnitario(row)
+              const tot = Number(row.quantity) * prezzo
               return (
                 <tr key={row.id} className="border-b border-neutral-200">
-                  <td className="py-3">{row.name}</td>
+                  <td className="py-3">
+                    {row.name}
+                    {sconto > 0 ? <span className="block text-[10px] text-neutral-500">Listino EUR {Number(row.unit_price).toFixed(2)} · sconto {sconto}% · paghi EUR {prezzo.toFixed(2)}</span> : null}
+                  </td>
                   <td className="text-center">{Number(row.quantity)}</td>
-                  <td className="text-right">{Number(row.unit_price).toFixed(2)}</td>
+                  <td className="text-right">
+                    {sconto > 0 ? <span><s>{Number(row.unit_price).toFixed(2)}</s> {prezzo.toFixed(2)}</span> : Number(row.unit_price).toFixed(2)}
+                  </td>
                   <td className="text-right">{tot.toFixed(2)}</td>
                   <td className="text-center">{Number(row.vat_rate || 0)}%</td>
                 </tr>

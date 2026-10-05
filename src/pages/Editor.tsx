@@ -15,6 +15,10 @@ const ALIQUOTE = [
   { code: 'N6', rate: 0, label: '0% Inversione contabile', note: 'Inversione contabile Art. 17 DPR 633/1972' },
 ]
 
+function netto(i: any) {
+  return Number(i.quantity) * Number(i.unit_price) * (1 - Number(i.discount_percent || 0) / 100)
+}
+
 async function prossimoNumero(tipo: string) {
   const year = new Date().getFullYear()
   const { data } = await supabase.from('invoices').select('invoice_number, invoice_type')
@@ -94,21 +98,11 @@ export default function Editor() {
     }
     const salva = confirm('Salvare la fattura prima di uscire?\nOK = salva\nAnnulla = elimina')
     if (salva) {
-      const taxable = items.reduce((s, i) => s + Number(i.quantity) * Number(i.unit_price), 0)
+      const taxable = items.reduce((s, i) => s + netto(i), 0)
       const { error } = await supabase.from('invoices').update({
-        client_id: clientId,
-        oggetto,
-        notes,
-        invoice_number: number,
-        taxable,
-        invoice_type: tipo,
-        sdi_status: 'da_inviare',
-        paid,
+        client_id: clientId, oggetto, notes, invoice_number: number, taxable, invoice_type: tipo, sdi_status: 'da_inviare', paid,
       }).eq('id', invoiceId)
-      if (error) {
-        alert(error.message)
-        return false
-      }
+      if (error) { alert(error.message); return false }
       setDirty(false)
       return true
     }
@@ -146,10 +140,7 @@ export default function Editor() {
     } else {
       const num = await prossimoNumero(tipoFromUrl)
       const { data: inv } = await supabase.from('invoices').insert({
-        invoice_number: num,
-        sdi_status: 'bozza',
-        client_id: clienteFromUrl || null,
-        invoice_type: tipoFromUrl,
+        invoice_number: num, sdi_status: 'bozza', client_id: clienteFromUrl || null, invoice_type: tipoFromUrl,
       }).select().single()
       if (inv) {
         setInvoiceId(inv.id)
@@ -165,28 +156,16 @@ export default function Editor() {
   async function save() {
     if (!invoiceId) return
     if (!clientId) return alert('Seleziona il destinatario prima di salvare')
-    const taxable = items.reduce((s, i) => s + Number(i.quantity) * Number(i.unit_price), 0)
+    const taxable = items.reduce((s, i) => s + netto(i), 0)
     const { error } = await supabase.from('invoices').update({
-      client_id: clientId,
-      oggetto,
-      notes,
-      invoice_number: number,
-      taxable,
-      invoice_type: tipo,
-      sdi_status: 'da_inviare',
-      paid,
+      client_id: clientId, oggetto, notes, invoice_number: number, taxable, invoice_type: tipo, sdi_status: 'da_inviare', paid,
     }).eq('id', invoiceId)
     if (error) alert(error.message)
-    else {
-      setSdiStatus('da_inviare')
-      setDirty(false)
-      alert('Salvato')
-    }
+    else { setSdiStatus('da_inviare'); setDirty(false); alert('Salvato') }
   }
 
   async function scegliDestinatario(c: Client) {
-    const ok = confirm('Cambiare il destinatario in ' + c.name + '?')
-    if (!ok) return
+    if (!confirm('Cambiare il destinatario in ' + c.name + '?')) return
     setClientId(c.id)
     setDirty(true)
     if (invoiceId) await supabase.from('invoices').update({ client_id: c.id }).eq('id', invoiceId)
@@ -196,8 +175,7 @@ export default function Editor() {
 
   async function eliminaFattura() {
     if (!invoiceId) return
-    const ok = confirm('Eliminare la fattura ' + number + '? Non si puo annullare.')
-    if (!ok) return
+    if (!confirm('Eliminare la fattura ' + number + '? Non si puo annullare.')) return
     setDirty(false)
     await supabase.from('invoice_items').delete().eq('invoice_id', invoiceId)
     const { error } = await supabase.from('invoices').delete().eq('id', invoiceId)
@@ -227,13 +205,7 @@ export default function Editor() {
   async function addMaterial(m: Material) {
     if (!invoiceId) return
     const { data } = await supabase.from('invoice_items').insert({
-      invoice_id: invoiceId,
-      name: m.name,
-      description: m.description,
-      quantity: 1,
-      unit_price: m.unit_price,
-      vat_rate: 22,
-      vat_note: null,
+      invoice_id: invoiceId, name: m.name, description: m.description, quantity: 1, unit_price: m.unit_price, vat_rate: 22, vat_note: null, discount_percent: 0,
     }).select().single()
     if (data) setItems(prev => [...prev, data])
     setSearchProd('')
@@ -243,12 +215,7 @@ export default function Editor() {
   async function addRiga() {
     if (!invoiceId) return
     const { data } = await supabase.from('invoice_items').insert({
-      invoice_id: invoiceId,
-      name: 'Nuova riga',
-      quantity: 1,
-      unit_price: 0,
-      vat_rate: 22,
-      vat_note: null,
+      invoice_id: invoiceId, name: 'Nuova riga', quantity: 1, unit_price: 0, vat_rate: 22, vat_note: null, discount_percent: 0,
     }).select().single()
     if (data) setItems(prev => [...prev, data])
     setDirty(true)
@@ -275,9 +242,7 @@ export default function Editor() {
   async function stessaIvaTutte() {
     const a = ALIQUOTE.find(x => x.code === ivaTutte)
     if (!a) return
-    for (const item of items) {
-      await updateItem(item.id, { vat_rate: a.rate, vat_note: a.note || null } as any)
-    }
+    for (const item of items) await updateItem(item.id, { vat_rate: a.rate, vat_note: a.note || null } as any)
   }
 
   async function removeItem(itemId: string) {
@@ -291,29 +256,21 @@ export default function Editor() {
     if (!clientId) return alert('Manca il destinatario')
     const client = clients.find(c => c.id === clientId)
     const to = client?.pec || client?.email
-    if (to) {
-      window.open(
-        'https://mail.google.com/mail/?view=cm&fs=1&to=' + encodeURIComponent(to) + '&su=' + encodeURIComponent((tipo === 'nota_credito' ? 'Nota di credito ' : 'Fattura ') + number),
-        '_blank'
-      )
-    }
+    if (to) window.open('https://mail.google.com/mail/?view=cm&fs=1&to=' + encodeURIComponent(to) + '&su=' + encodeURIComponent((tipo === 'nota_credito' ? 'Nota di credito ' : 'Fattura ') + number), '_blank')
     await supabase.from('invoices').update({ email_sent: true, email_sent_at: new Date().toISOString() }).eq('id', invoiceId)
     setEmailSent(true)
   }
 
   const selected = clients.find(c => c.id === clientId)
   const destFiltrati = cercaDest.trim().length < 2 ? [] : clients.filter(c => c.name.toLowerCase().includes(cercaDest.toLowerCase()))
-  const found = searchProd.trim().length >= 2
-    ? materials.filter(m => m.name.toLowerCase().includes(searchProd.toLowerCase())).slice(0, 8)
-    : []
-  const tot = items.reduce((s, i) => s + Number(i.quantity) * Number(i.unit_price), 0)
-  const ivaTot = items.reduce((s, i) => s + Number(i.quantity) * Number(i.unit_price) * (Number(i.vat_rate) / 100), 0)
+  const found = searchProd.trim().length >= 2 ? materials.filter(m => m.name.toLowerCase().includes(searchProd.toLowerCase())).slice(0, 8) : []
+  const tot = items.reduce((s, i) => s + netto(i), 0)
+  const ivaTot = items.reduce((s, i) => s + netto(i) * (Number(i.vat_rate) / 100), 0)
   const titolo = tipo === 'nota_credito' || String(number).startsWith('NC') ? 'Nota di credito' : 'Fattura'
 
   return (
     <div className="space-y-6 pb-8">
       <h1 className="text-2xl font-bold">{titolo} {number}</h1>
-
       <div className="bg-white rounded-xl shadow p-4 space-y-3">
         <p className="text-sm text-slate-500">Destinatario</p>
         {selected ? (
@@ -323,20 +280,14 @@ export default function Editor() {
             <p>PEC: {selected.pec || '-'}</p>
             <p>SDI: {selected.codice_sdi || '-'}</p>
           </div>
-        ) : (
-          <p className="text-red-700 text-sm">Nessun destinatario. Senza cliente non si puo salvare.</p>
-        )}
-        <button type="button" onClick={() => setCambia(!cambia)} className="border px-4 py-2 rounded-lg text-sm">
-          {cambia ? 'Annulla cambio' : 'Cambia destinatario'}
-        </button>
+        ) : <p className="text-red-700 text-sm">Nessun destinatario. Senza cliente non si puo salvare.</p>}
+        <button type="button" onClick={() => setCambia(!cambia)} className="border px-4 py-2 rounded-lg text-sm">{cambia ? 'Annulla cambio' : 'Cambia destinatario'}</button>
         {cambia ? (
           <div className="border rounded-lg p-3 space-y-2">
             <input value={cercaDest} onChange={e => setCercaDest(e.target.value)} placeholder="Scrivi almeno 2 lettere..." className="w-full border rounded-lg px-3 py-2" />
             <div className="max-h-40 overflow-auto">
               {destFiltrati.map(c => (
-                <button key={c.id} type="button" onClick={() => scegliDestinatario(c)} className="block w-full text-left px-3 py-2 text-sm hover:bg-amber-50">
-                  {c.name}
-                </button>
+                <button key={c.id} type="button" onClick={() => scegliDestinatario(c)} className="block w-full text-left px-3 py-2 text-sm hover:bg-amber-50">{c.name}</button>
               ))}
             </div>
           </div>
@@ -344,7 +295,6 @@ export default function Editor() {
         <input value={oggetto} onChange={e => { setOggetto(e.target.value); setDirty(true) }} placeholder="Oggetto" className="w-full border rounded-lg px-3 py-2" />
         <textarea value={notes} onChange={e => { setNotes(e.target.value); setDirty(true) }} placeholder="Note" className="w-full border rounded-lg px-3 py-2" rows={3} />
       </div>
-
       <div className="bg-white rounded-xl shadow p-4 space-y-3">
         <h2 className="font-semibold">Aggiungi una riga</h2>
         <input value={searchProd} onChange={e => setSearchProd(e.target.value)} placeholder="Cerca prodotto (2 lettere)..." className="w-full border rounded-lg px-3 py-2" />
@@ -352,15 +302,13 @@ export default function Editor() {
           <div className="border rounded-lg divide-y">
             {found.map(m => (
               <button key={m.id} type="button" onClick={() => addMaterial(m)} className="flex justify-between w-full px-3 py-2 text-sm hover:bg-blue-50">
-                <span>{m.name}</span>
-                <span>EUR {Number(m.unit_price).toFixed(2)}</span>
+                <span>{m.name}</span><span>EUR {Number(m.unit_price).toFixed(2)}</span>
               </button>
             ))}
           </div>
         ) : null}
         <button type="button" onClick={addRiga} className="border px-4 py-2 rounded-lg text-sm">+ Riga libera</button>
       </div>
-
       <div className="bg-white rounded-xl shadow p-4 space-y-3">
         <div className="flex flex-wrap gap-2 items-center">
           <h2 className="font-semibold">Righe</h2>
@@ -370,7 +318,7 @@ export default function Editor() {
           <button type="button" onClick={stessaIvaTutte} className="border px-3 py-1 rounded-lg text-sm">Applica IVA a tutte le righe</button>
         </div>
         {items.map(item => (
-          <div key={item.id} className="grid md:grid-cols-6 gap-2 items-center">
+          <div key={item.id} className="grid md:grid-cols-7 gap-2 items-center">
             <input value={item.name} onChange={e => updateItem(item.id, { name: e.target.value })} className="border rounded px-2 py-1 md:col-span-2" />
             <div className="flex items-center gap-1">
               <button type="button" onClick={() => updateItem(item.id, { quantity: Math.max(1, Number(item.quantity) - 1) })} className="w-8 h-8 border rounded">-</button>
@@ -378,27 +326,24 @@ export default function Editor() {
               <button type="button" onClick={() => updateItem(item.id, { quantity: Number(item.quantity) + 1 })} className="w-8 h-8 border rounded">+</button>
             </div>
             <input type="number" step="0.01" value={item.unit_price} onChange={e => updateItem(item.id, { unit_price: Number(e.target.value) })} className="border rounded px-2 py-1" />
+            <input type="number" min="0" max="100" value={(item as any).discount_percent || 0} onChange={e => updateItem(item.id, { discount_percent: Number(e.target.value) } as any)} className="border rounded px-2 py-1" title="Sconto %" />
             <select value={trovaIva(item).code} onChange={e => setIva(item.id, e.target.value)} className="border rounded px-2 py-1 text-xs">
               {ALIQUOTE.map(a => <option key={a.code} value={a.code}>{a.label}</option>)}
             </select>
             <button type="button" onClick={() => removeItem(item.id)} className="text-red-600 text-sm">x</button>
+            {Number((item as any).discount_percent || 0) > 0 ? (
+              <p className="text-xs text-slate-500 md:col-span-7">Listino EUR {Number(item.unit_price).toFixed(2)} · sconto {(item as any).discount_percent}% · paghi EUR {(Number(item.unit_price) * (1 - Number((item as any).discount_percent) / 100)).toFixed(2)}</p>
+            ) : null}
           </div>
         ))}
-        <p className="text-right font-bold">
-          Imponibile EUR {tot.toFixed(2)} · IVA EUR {ivaTot.toFixed(2)} · Totale EUR {(tot + ivaTot).toFixed(2)}
-        </p>
+        <p className="text-right font-bold">Imponibile EUR {tot.toFixed(2)} · IVA EUR {ivaTot.toFixed(2)} · Totale EUR {(tot + ivaTot).toFixed(2)}</p>
       </div>
-
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={save} className="border px-4 py-2 rounded-lg bg-white">Salva</button>
-        <button type="button" onClick={togglePaid} className={'px-4 py-2 rounded-lg ' + (paid ? 'bg-green-600 text-white' : 'border bg-white')}>
-          {paid ? 'Gia pagata' : 'Segna come pagata'}
-        </button>
+        <button type="button" onClick={togglePaid} className={'px-4 py-2 rounded-lg ' + (paid ? 'bg-green-600 text-white' : 'border bg-white')}>{paid ? 'Gia pagata' : 'Segna come pagata'}</button>
         {invoiceId ? <Link to={'/stampa/' + invoiceId} className="bg-slate-900 text-white px-4 py-2 rounded-lg">Anteprima / Stampa</Link> : null}
         <button type="button" onClick={marcaEmail} className="bg-sky-700 text-white px-4 py-2 rounded-lg">{emailSent ? 'Email gia inviata' : 'Invia email'}</button>
-        <button type="button" onClick={inviaSdi} className="bg-emerald-700 text-white px-4 py-2 rounded-lg">
-          {sdiStatus === 'inviata_sdi' ? 'Gia inviata SDI' : 'Invia allo SDI'}
-        </button>
+        <button type="button" onClick={inviaSdi} className="bg-emerald-700 text-white px-4 py-2 rounded-lg">{sdiStatus === 'inviata_sdi' ? 'Gia inviata SDI' : 'Invia allo SDI'}</button>
         <button type="button" onClick={eliminaFattura} className="bg-red-100 text-red-700 px-4 py-2 rounded-lg">Elimina fattura</button>
       </div>
     </div>
