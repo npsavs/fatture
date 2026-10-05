@@ -80,14 +80,7 @@ export default function Fornitori() {
       <h1 className="text-2xl font-bold">Fornitori</h1>
       {msg ? <p className="text-sm text-green-700">{msg}</p> : null}
 
-      <form onSubmit={salvaFornitore} className="bg-white rounded-xl shadow p-4 space-y-3">
-        <h2 className="font-semibold">Nuovo fornitore</h2>
-        <input name="name" required placeholder="Nome *" value={form.name} onChange={onChange} className="w-full border rounded-lg px-3 py-2" />
-        <input name="cf_piva" placeholder="P.IVA o codice fiscale" value={form.cf_piva} onChange={onChange} className="w-full border rounded-lg px-3 py-2" />
-        <input name="phone" placeholder="Telefono" value={form.phone} onChange={onChange} className="w-full border rounded-lg px-3 py-2" />
-        <input name="email" placeholder="Email" value={form.email} onChange={onChange} className="w-full border rounded-lg px-3 py-2" />
-        <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg">Salva fornitore</button>
-      </form>
+    <Link to="/fornitori/nuovo" className="inline-block bg-blue-600 text-white px-4 py-2 rounded-lg">Aggiungi fornitore</Link>
 
       <div className="bg-white rounded-xl shadow p-4 space-y-2">
         <h2 className="font-semibold">Cerca fornitore</h2>

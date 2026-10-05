@@ -10,6 +10,7 @@ import Stampa from './pages/Stampa'
 import Fornitori from './pages/Fornitori'
 import Ricevuta from './pages/Ricevuta'
 import Clienti from './pages/Clienti'
+import NuovoFornitore from './pages/NuovoFornitore'
 import Sdi from './pages/Sdi'
 import ImportaXml from './pages/ImportaXml'
 function DaCliente() {
@@ -39,6 +40,7 @@ export default function App() {
           <Route path="/nuovo" element={<Editor />} />
           <Route path="/fattura/:id" element={<Editor />} />
           <Route path="/stampa/:id" element={<Stampa />} />
+<Route path="/fornitori/nuovo" element={<NuovoFornitore />} />
           <Route path="/fornitori" element={<Fornitori />} />
           <Route path="/ricevuta/:id" element={<Ricevuta />} />
           <Route path="/clienti" element={<Clienti />} />
