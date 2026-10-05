@@ -98,6 +98,18 @@ export default function Lista() {
     navigate(t === 'ricevute' ? '/ricevute' : '/emesse')
   }
 
+  function passaFiltro(r: any, ricevuta: boolean) {
+    if (filtro === 'pagate') return !!r.paid
+    if (filtro === 'non_pagate') return !r.paid
+    if (ricevuta) return filtro === 'tutte' || filtro === 'pagate' || filtro === 'non_pagate'
+    if (filtro === 'inviate') return r.sdi_status === 'inviata_sdi' || r.sdi_status === 'consegnata'
+    if (filtro === 'da_inviare') return r.sdi_status === 'da_inviare' || r.sdi_status === 'bozza'
+    if (filtro === 'nc') return r.invoice_type === 'nota_credito'
+    if (filtro === 'fattura') return (r.invoice_type || 'fattura') !== 'nota_credito'
+    if (filtro === 'scartata') return r.sdi_status === 'scartata'
+    return true
+  }
+
   const filteredClients = searchClient.trim().length < 2
     ? []
     : clients.filter(c => (c as any).kind !== 'fornitore' && c.name.toLowerCase().includes(searchClient.toLowerCase()))
@@ -109,23 +121,14 @@ export default function Lista() {
     if (clientId && r.client_id !== clientId) return false
     if (cerca && !(String(r.invoice_number || '').toLowerCase().includes(cerca) || String(r.clients?.name || '').toLowerCase().includes(cerca))) return false
     if (filtroAnno && annoDi(r) !== filtroAnno) return false
-    if (filtro === 'inviate') return r.sdi_status === 'inviata_sdi' || r.sdi_status === 'consegnata'
-    if (filtro === 'da_inviare') return r.sdi_status === 'da_inviare' || r.sdi_status === 'bozza'
-    if (filtro === 'pagate') return !!r.paid
-    if (filtro === 'non_pagate') return !r.paid
-    if (filtro === 'nc') return r.invoice_type === 'nota_credito'
-    if (filtro === 'fattura') return (r.invoice_type || 'fattura') !== 'nota_credito'
-    if (filtro === 'scartata') return r.sdi_status === 'scartata'
-    return true
+    return passaFiltro(r, false)
   })
 
   const filteredRicevute = ricevute.filter(r => {
     if (cerca && !(String(r.invoice_number || '').toLowerCase().includes(cerca) || String(r.suppliers?.name || '').toLowerCase().includes(cerca))) return false
     const anno = annoDi(r)
     if (filtroAnno && anno && anno !== filtroAnno) return false
-    if (filtro === 'pagate') return !!r.paid
-    if (filtro === 'non_pagate') return !r.paid
-    return true
+    return passaFiltro(r, true)
   })
 
   const stats = useMemo(() => {
@@ -154,31 +157,21 @@ export default function Lista() {
       const imponibile = totale / 1.22
       return { imponibile, iva: totale - imponibile, totale, n: lista.length }
     }
-    const baseClienti = rows.filter(r => {
-      if (clientId && r.client_id !== clientId) return false
-      if (cerca && !(String(r.invoice_number || '').toLowerCase().includes(cerca) || String(r.clients?.name || '').toLowerCase().includes(cerca))) return false
-      return true
-    })
-    const baseFornitori = ricevute.filter(r => {
-      if (cerca && !(String(r.invoice_number || '').toLowerCase().includes(cerca) || String(r.suppliers?.name || '').toLowerCase().includes(cerca))) return false
-      return true
-    })
-    const ricercaClienti = filtroAnno ? baseClienti.filter(r => annoDi(r) === filtroAnno) : baseClienti
-    const ricercaFornitori = filtroAnno ? baseFornitori.filter(r => !annoDi(r) || annoDi(r) === filtroAnno) : baseFornitori
     return {
       clientiAnno: contoClienti(rows.filter(r => annoDi(r) === annoCorrente)),
       clientiTrim: contoClienti(rows.filter(r => annoDi(r) === annoCorrente && trimestreDi(r) === trim)),
-      clientiRicerca: contoClienti(ricercaClienti),
-      clientiRicercaTrim: contoClienti(ricercaClienti.filter(r => trimestreDi(r) === trim)),
+      clientiRicerca: contoClienti(filteredRows),
+      clientiRicercaTrim: contoClienti(filteredRows.filter(r => trimestreDi(r) === trim)),
       fornitoriAnno: contoFornitori(ricevute.filter(r => annoDi(r) === annoCorrente)),
       fornitoriTrim: contoFornitori(ricevute.filter(r => annoDi(r) === annoCorrente && trimestreDi(r) === trim)),
-      fornitoriRicerca: contoFornitori(ricercaFornitori),
-      fornitoriRicercaTrim: contoFornitori(ricercaFornitori.filter(r => trimestreDi(r) === trim)),
+      fornitoriRicerca: contoFornitori(filteredRicevute),
+      fornitoriRicercaTrim: contoFornitori(filteredRicevute.filter(r => trimestreDi(r) === trim)),
     }
-  }, [rows, ricevute, itemsAll, filtroAnno, clientId, cerca, trim])
+  }, [rows, ricevute, itemsAll, filteredRows, filteredRicevute, trim])
 
   const titoloCliente = selected ? selected.name : (cerca || 'tutti i clienti')
   const titoloFornitore = cerca || 'tutti i fornitori'
+  const nomeFiltro = filtro === 'tutte' ? 'tutte' : filtro.replace('_', ' ')
 
   return (
     <div className="space-y-6">
@@ -217,12 +210,12 @@ export default function Lista() {
             <p className="text-sm text-slate-500">Imponibile {stats.clientiTrim.imponibile.toFixed(2)} · IVA {stats.clientiTrim.iva.toFixed(2)} · {stats.clientiTrim.n}</p>
           </div>
           <div className="bg-white rounded-xl shadow p-4">
-            <p className="text-xs text-slate-500">Totale ricerca · {titoloCliente} · {filtroAnno || 'tutti gli anni'}</p>
+            <p className="text-xs text-slate-500">Filtro · {nomeFiltro} · {titoloCliente} · {filtroAnno || 'tutti gli anni'}</p>
             <p className="text-xl font-bold">EUR {stats.clientiRicerca.totale.toFixed(2)}</p>
             <p className="text-sm text-slate-500">Imponibile {stats.clientiRicerca.imponibile.toFixed(2)} · IVA {stats.clientiRicerca.iva.toFixed(2)} · {stats.clientiRicerca.n}</p>
           </div>
           <div className="bg-white rounded-xl shadow p-4">
-            <p className="text-xs text-slate-500">Trimestre ricerca T{trim} · {titoloCliente}</p>
+            <p className="text-xs text-slate-500">Filtro T{trim} · {nomeFiltro} · {titoloCliente}</p>
             <p className="text-xl font-bold">EUR {stats.clientiRicercaTrim.totale.toFixed(2)}</p>
             <p className="text-sm text-slate-500">Imponibile {stats.clientiRicercaTrim.imponibile.toFixed(2)} · IVA {stats.clientiRicercaTrim.iva.toFixed(2)} · {stats.clientiRicercaTrim.n}</p>
           </div>
@@ -240,12 +233,12 @@ export default function Lista() {
             <p className="text-sm text-slate-500">Imponibile {stats.fornitoriTrim.imponibile.toFixed(2)} · IVA {stats.fornitoriTrim.iva.toFixed(2)} · {stats.fornitoriTrim.n}</p>
           </div>
           <div className="bg-white rounded-xl shadow p-4">
-            <p className="text-xs text-slate-500">Totale ricerca · {titoloFornitore} · {filtroAnno || 'tutti gli anni'}</p>
+            <p className="text-xs text-slate-500">Filtro · {nomeFiltro} · {titoloFornitore} · {filtroAnno || 'tutti gli anni'}</p>
             <p className="text-xl font-bold">EUR {stats.fornitoriRicerca.totale.toFixed(2)}</p>
             <p className="text-sm text-slate-500">Imponibile {stats.fornitoriRicerca.imponibile.toFixed(2)} · IVA {stats.fornitoriRicerca.iva.toFixed(2)} · {stats.fornitoriRicerca.n}</p>
           </div>
           <div className="bg-white rounded-xl shadow p-4">
-            <p className="text-xs text-slate-500">Trimestre ricerca T{trim} · {titoloFornitore}</p>
+            <p className="text-xs text-slate-500">Filtro T{trim} · {nomeFiltro} · {titoloFornitore}</p>
             <p className="text-xl font-bold">EUR {stats.fornitoriRicercaTrim.totale.toFixed(2)}</p>
             <p className="text-sm text-slate-500">Imponibile {stats.fornitoriRicercaTrim.imponibile.toFixed(2)} · IVA {stats.fornitoriRicercaTrim.iva.toFixed(2)} · {stats.fornitoriRicercaTrim.n}</p>
           </div>
