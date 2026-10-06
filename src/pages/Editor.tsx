@@ -39,6 +39,7 @@ export default function Editor() {
   const params = new URLSearchParams(window.location.search)
   const clienteFromUrl = params.get('cliente')
   const tipoFromUrl = params.get('tipo') === 'nota_credito' ? 'nota_credito' : 'fattura'
+  const nuovaFromUrl = params.get('nuova') === '1'
 
   const [invoiceId, setInvoiceId] = useState<string | null>(id || null)
   const [clients, setClients] = useState<Client[]>([])
@@ -58,6 +59,7 @@ export default function Editor() {
   const [ivaTutte, setIvaTutte] = useState('22')
   const [dirty, setDirty] = useState(false)
   const [modifica, setModifica] = useState(!id)
+  const [nuova, setNuova] = useState(nuovaFromUrl)
 
   useEffect(() => { start() }, [])
 
@@ -84,10 +86,11 @@ export default function Editor() {
       window.removeEventListener('beforeunload', onLeave)
       document.removeEventListener('click', onClick, true)
     }
-  }, [dirty, modifica, clientId, invoiceId, oggetto, notes, number, tipo, paid, items])
+  }, [dirty, modifica, clientId, invoiceId, oggetto, notes, number, tipo, paid, items, nuova])
 
   async function scriviRighe() {
     for (const item of items) {
+      if (String(item.id).startsWith('tmp-')) continue
       await supabase.from('invoice_items').update({
         name: item.name,
         quantity: item.quantity,
@@ -99,18 +102,28 @@ export default function Editor() {
     }
   }
 
+  async function cancellaBozza() {
+    if (!invoiceId) return
+    setDirty(false)
+    setModifica(false)
+    setNuova(false)
+    await supabase.from('invoice_items').delete().eq('invoice_id', invoiceId)
+    await supabase.from('invoices').delete().eq('id', invoiceId)
+  }
+
   async function salvaOAbbandona() {
-    const salva = confirm('Salvare le modifiche?\nOK = salva\nAnnulla = abbandona e lascia la fattura com era')
+    const salva = confirm(nuova
+      ? 'Salvare la fattura?\nOK = salva e tiene il numero\nAnnulla = cancella la bozza'
+      : 'Salvare le modifiche?\nOK = salva\nAnnulla = abbandona')
     if (!salva) {
+      if (nuova) await cancellaBozza()
       setDirty(false)
       setModifica(false)
       return true
     }
     if (!clientId) {
-      alert('Senza destinatario non salvo. La fattura resta com era.')
-      setDirty(false)
-      setModifica(false)
-      return true
+      alert('Senza destinatario non salvo.')
+      return false
     }
     await scriviRighe()
     const taxable = items.reduce((s, i) => s + netto(i), 0)
@@ -118,8 +131,11 @@ export default function Editor() {
       client_id: clientId, oggetto, notes, invoice_number: number, taxable, invoice_type: tipo, sdi_status: 'da_inviare', paid,
     }).eq('id', invoiceId)
     if (error) { alert(error.message); return false }
+    setSdiStatus('da_inviare')
     setDirty(false)
     setModifica(false)
+    setNuova(false)
+    window.history.replaceState(null, '', '/fattura/' + invoiceId)
     return true
   }
 
@@ -145,6 +161,11 @@ export default function Editor() {
       setItems(it || [])
       setDirty(false)
       setModifica(false)
+      if (nuovaFromUrl && (inv?.sdi_status || 'bozza') === 'bozza') {
+        setModifica(true)
+        setDirty(true)
+        setNuova(true)
+      }
     } else {
       const num = await prossimoNumero(tipoFromUrl)
       const { data: inv } = await supabase.from('invoices').insert({
@@ -157,7 +178,8 @@ export default function Editor() {
         if (clienteFromUrl) setClientId(clienteFromUrl)
         setModifica(true)
         setDirty(true)
-        navigate('/fattura/' + inv.id, { replace: true })
+        setNuova(true)
+        navigate('/fattura/' + inv.id + '?nuova=1', { replace: true })
       }
     }
   }
@@ -171,7 +193,14 @@ export default function Editor() {
       client_id: clientId, oggetto, notes, invoice_number: number, taxable, invoice_type: tipo, sdi_status: 'da_inviare', paid,
     }).eq('id', invoiceId)
     if (error) alert(error.message)
-    else { setSdiStatus('da_inviare'); setDirty(false); setModifica(false); alert('Salvato') }
+    else {
+      setSdiStatus('da_inviare')
+      setDirty(false)
+      setModifica(false)
+      setNuova(false)
+      window.history.replaceState(null, '', '/fattura/' + invoiceId)
+      alert('Salvato')
+    }
   }
 
   async function scegliDestinatario(c: Client) {
@@ -187,6 +216,7 @@ export default function Editor() {
     if (!invoiceId) return
     if (!confirm('Eliminare la fattura ' + number + '? Non si puo annullare.')) return
     setDirty(false)
+    setNuova(false)
     await supabase.from('invoice_items').delete().eq('invoice_id', invoiceId)
     const { error } = await supabase.from('invoices').delete().eq('id', invoiceId)
     if (error) return alert(error.message)
@@ -258,6 +288,7 @@ export default function Editor() {
   async function removeItem(itemId: string) {
     if (!modifica) return
     setDirty(true)
+    await supabase.from('invoice_items').delete().eq('id', itemId)
     setItems(prev => prev.filter(i => i.id !== itemId))
   }
 
@@ -282,6 +313,7 @@ export default function Editor() {
     <div className="space-y-6 pb-8">
       <div className="flex flex-wrap gap-2 items-center">
         <h1 className="text-2xl font-bold flex-1">{titolo} {number}</h1>
+        {nuova ? <span className="text-sm bg-amber-100 text-amber-800 px-3 py-1 rounded-full">Bozza: salva o viene cancellata</span> : null}
         {!modifica ? <button type="button" onClick={() => setModifica(true)} className="border px-4 py-2 rounded-lg bg-white">Modifica</button> : null}
         {invoiceId ? <Link to={'/stampa/' + invoiceId} className="bg-slate-900 text-white px-4 py-2 rounded-lg">Anteprima / Stampa</Link> : null}
       </div>
@@ -364,6 +396,7 @@ export default function Editor() {
           <button type="button" onClick={togglePaid} className={'px-4 py-2 rounded-lg ' + (paid ? 'bg-green-600 text-white' : 'border bg-white')}>{paid ? 'Gia pagata' : 'Segna come pagata'}</button>
           <button type="button" onClick={marcaEmail} className="bg-sky-700 text-white px-4 py-2 rounded-lg">{emailSent ? 'Email gia inviata' : 'Invia email'}</button>
           <button type="button" onClick={inviaSdi} className="bg-emerald-700 text-white px-4 py-2 rounded-lg">{sdiStatus === 'inviata_sdi' ? 'Gia inviata SDI' : 'Invia allo SDI'}</button>
+          {nuova ? <button type="button" onClick={async () => { if (!confirm('Cancellare questa bozza?')) return; await cancellaBozza(); navigate('/') }} className="bg-amber-100 text-amber-800 px-4 py-2 rounded-lg">Annulla e cancella bozza</button> : null}
           <button type="button" onClick={eliminaFattura} className="bg-red-100 text-red-700 px-4 py-2 rounded-lg">Elimina fattura</button>
         </div>
       ) : null}
