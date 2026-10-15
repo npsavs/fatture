@@ -396,6 +396,7 @@ export default function Editor() {
           <button type="button" onClick={togglePaid} className={'px-4 py-2 rounded-lg ' + (paid ? 'bg-green-600 text-white' : 'border bg-white')}>{paid ? 'Gia pagata' : 'Segna come pagata'}</button>
           <button type="button" onClick={marcaEmail} className="bg-sky-700 text-white px-4 py-2 rounded-lg">{emailSent ? 'Email gia inviata' : 'Invia email'}</button>
           <button type="button" onClick={inviaSdi} className="bg-emerald-700 text-white px-4 py-2 rounded-lg">{sdiStatus === 'inviata_sdi' ? 'Gia inviata SDI' : 'Invia allo SDI'}</button>
+<button type="button" onClick={creaInFic} className="bg-indigo-700 text-white px-4 py-2 rounded-lg">Prova Fatture in Cloud</button>
           {nuova ? <button type="button" onClick={async () => { if (!confirm('Cancellare questa bozza?')) return; await cancellaBozza(); navigate('/') }} className="bg-amber-100 text-amber-800 px-4 py-2 rounded-lg">Annulla e cancella bozza</button> : null}
           <button type="button" onClick={eliminaFattura} className="bg-red-100 text-red-700 px-4 py-2 rounded-lg">Elimina fattura</button>
         </div>
