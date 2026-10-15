@@ -241,6 +241,42 @@ export default function Editor() {
     alert('Segnata come inviata SDI')
   }
 
+  async function creaInFic() {
+    if (!clientId) return alert('Manca il destinatario')
+    if (!items.length) return alert('Mancano le righe')
+    const cliente = clients.find(c => c.id === clientId)
+    if (!cliente) return alert('Cliente non trovato')
+    if (!confirm('Creare la fattura di PROVA in Fatture in Cloud? Non viene inviata allo SDI.')) return
+    const r = await fetch('/api/fic', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tipo,
+        number,
+        oggetto,
+        date: new Date().toISOString(),
+        client: {
+          name: cliente.name,
+          cf_piva: cliente.cf_piva,
+          pec: cliente.pec,
+          codice_sdi: cliente.codice_sdi,
+          address: (cliente as any).address,
+          city: (cliente as any).city,
+        },
+        items: items.map(i => ({
+          name: i.name,
+          quantity: i.quantity,
+          unit_price: i.unit_price,
+          vat_rate: i.vat_rate,
+          discount_percent: (i as any).discount_percent || 0,
+        })),
+      }),
+    })
+    const j = await r.json().catch(() => ({}))
+    if (!r.ok) return alert(j.error || 'Errore Fatture in Cloud')
+    alert('Creata in Fatture in Cloud. Id ' + (j.id || ''))
+  }
+
   async function addMaterial(m: Material) {
     if (!invoiceId || !modifica) return
     const { data } = await supabase.from('invoice_items').insert({
@@ -396,7 +432,7 @@ export default function Editor() {
           <button type="button" onClick={togglePaid} className={'px-4 py-2 rounded-lg ' + (paid ? 'bg-green-600 text-white' : 'border bg-white')}>{paid ? 'Gia pagata' : 'Segna come pagata'}</button>
           <button type="button" onClick={marcaEmail} className="bg-sky-700 text-white px-4 py-2 rounded-lg">{emailSent ? 'Email gia inviata' : 'Invia email'}</button>
           <button type="button" onClick={inviaSdi} className="bg-emerald-700 text-white px-4 py-2 rounded-lg">{sdiStatus === 'inviata_sdi' ? 'Gia inviata SDI' : 'Invia allo SDI'}</button>
-<button type="button" onClick={creaInFic} className="bg-indigo-700 text-white px-4 py-2 rounded-lg">Prova Fatture in Cloud</button>
+          <button type="button" onClick={creaInFic} className="bg-indigo-700 text-white px-4 py-2 rounded-lg">Prova Fatture in Cloud</button>
           {nuova ? <button type="button" onClick={async () => { if (!confirm('Cancellare questa bozza?')) return; await cancellaBozza(); navigate('/') }} className="bg-amber-100 text-amber-800 px-4 py-2 rounded-lg">Annulla e cancella bozza</button> : null}
           <button type="button" onClick={eliminaFattura} className="bg-red-100 text-red-700 px-4 py-2 rounded-lg">Elimina fattura</button>
         </div>
