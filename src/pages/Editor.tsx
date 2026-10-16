@@ -256,13 +256,15 @@ export default function Editor() {
         number,
         oggetto,
         date: new Date().toISOString(),
-        client: {
+             client: {
           name: cliente.name,
           cf_piva: cliente.cf_piva,
           pec: cliente.pec,
           codice_sdi: cliente.codice_sdi,
-          address: (cliente as any).address,
-          city: (cliente as any).city,
+          address: cliente.address,
+          city: cliente.city,
+          zip: cliente.zip,
+          province: cliente.province,
         },
         items: items.map(i => ({
           name: i.name,
