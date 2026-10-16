@@ -256,7 +256,7 @@ export default function Editor() {
         number,
         oggetto,
         date: new Date().toISOString(),
-             client: {
+        client: {
           name: cliente.name,
           cf_piva: cliente.cf_piva,
           pec: cliente.pec,
