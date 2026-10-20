@@ -140,10 +140,24 @@ export default function Editor() {
     return true
   }
 
-  async function start() {
-    const { data: cl } = await supabase.from('clients').select('*').order('name')
+  
+async function caricaClienti() {
+  const tutti: any[] = []
+  let start = 0
+  while (true) {
+    const { data: cl } = await supabase.from('clients').select('*').order('name').range(start, start + 999)
+    if (!cl || cl.length === 0) break
+    tutti.push(...cl)
+    if (cl.length < 1000) break
+    start += 1000
+  }
+  return tutti
+}
+
+async function start() {
+    const cl = await caricaClienti()
     const { data: mat } = await supabase.from('materials').select('*').order('name')
-    setClients(cl || [])
+    setClients(cl)
     setMaterials(mat || [])
     if (id) {
       const { data: inv } = await supabase.from('invoices').select('*').eq('id', id).single()
