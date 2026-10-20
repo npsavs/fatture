@@ -53,14 +53,22 @@ export default function Lista() {
 
   useEffect(() => { load() }, [])
 
-  async function load() {
+async function load() {
     const { data } = await supabase.from('invoices').select('*, clients(name)').order('created_at', { ascending: false })
     const { data: rec } = await supabase.from('supplier_invoices').select('*, suppliers(name)').order('created_at', { ascending: false })
-    const { data: cl } = await supabase.from('clients').select('*').order('name')
     const { data: it } = await supabase.from('invoice_items').select('invoice_id, quantity, unit_price, vat_rate')
+    const tutti: any[] = []
+    let start = 0
+    while (true) {
+      const { data: cl } = await supabase.from('clients').select('*').order('name').range(start, start + 999)
+      if (!cl || cl.length === 0) break
+      tutti.push(...cl)
+      if (cl.length < 1000) break
+      start += 1000
+    }
     setRows(data || [])
     setRicevute(rec || [])
-    setClients(cl || [])
+    setClients(tutti)
     setItemsAll(it || [])
   }
 
